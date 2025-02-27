@@ -19,56 +19,59 @@ class SoundBridgeClient:
     class Speaker(Thread):
         """ Captures system audio and streams it via UDP. """
 
-        def __init__(self, outer):
+        def __init__(self, client):
             super().__init__()
-            self.outer = outer
+            self.client = client
 
         @override
         def run(self):
             """ Continuously captures and streams audio. """
-            stream = self.outer.audio_interface.open(
+            stream = self.client.audio_interface.open(
                 format=FORMAT,
                 channels=CHANNELS,
                 rate=SAMPLE_RATE,
                 input=True,
-                input_device_index=self.outer.loopback_device["index"],
+                input_device_index=self.client.loopback_device['index'],
                 frames_per_buffer=NUM_FRAMES,
             )
             try:
                 while True:
                     audio_data: bytes = stream.read(NUM_FRAMES, exception_on_overflow=False)
-                    self.outer.send_data(audio_data)
+                    self.client.send_data(audio_data)
             except OSError:
-                print("Speaker stopped")
+                print("Speaker stopped.")
             finally:
-                # Ensure cleanup of resources
+                # Ensure resource cleanup
                 stream.stop_stream()
                 stream.close()
 
     class Microphone(Thread):
-        def __init__(self, outer):
+        """ Receives audio data via UDP and outputs it to virtual cable. """
+
+        def __init__(self, client):
             super().__init__()
-            self.outer = outer
+            self.client = client
 
         @override
         def run(self):
-            stream = self.outer.audio_interface.open(
+            """ Continuously receives and outputs to virtual cable. """
+            stream = self.client.audio_interface.open(
                 format=FORMAT,
                 channels=CHANNELS,
                 rate=SAMPLE_RATE,
                 output=True,
-                output_device_index=self.outer.virtual_cable_input['index'],
+                output_device_index=self.client.virtual_cable_input['index'],
             )
             # Initialize the connection
-            self.outer.send_data(b'')
+            self.client.send_data(b'')
             try:
                 while True:
-                    data, _ = self.outer.recv_data()
+                    data, _ = self.client.receive_data()
                     stream.write(data)
             except OSError:
-                print("Microphone stopped")
+                print("Microphone stopped.")
             finally:
-                # Ensure cleanup of resources
+                # Ensure resource cleanup
                 stream.stop_stream()
                 stream.close()
 
@@ -80,36 +83,40 @@ class SoundBridgeClient:
         self.audio_interface = pyaudio.PyAudio()
         self.loopback_device = self.audio_interface.get_default_wasapi_loopback()
         print(f"Capturing from: {self.loopback_device['name']}")
+
+        # Find Virtual Audio Cable (CABLE Input)
+        self.virtual_cable_input = None
         for i in range(self.audio_interface.get_device_count()):
             device_info = self.audio_interface.get_device_info_by_index(i)
-            if 'CABLE Input' in device_info['name'] and device_info['hostApi'] == 2:  # WASAPI
+            if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 2:  # WASAPI
                 self.virtual_cable_input = device_info
                 break
-        else:
-            raise RuntimeError(f"No CABLE Input device found")
+        if self.virtual_cable_input is None:
+            raise RuntimeError("No CABLE Input device found.")
 
+        # Initialize speaker and microphone threads
         self.speaker = self.Speaker(self)
         self.microphone = self.Microphone(self)
 
-    def __del__(self):
-        self.audio_interface.terminate()
-
     def send_data(self, data: bytes):
+        """ Sends audio data to the server. """
         return self.client_socket.sendto(data, self.server_address)
 
-    def recv_data(self) -> bytes:
+    def receive_data(self) -> bytes:
+        """ Receives audio data from the server. """
         return self.client_socket.recvfrom(CHUNK_SIZE)[0]
 
     def close(self):
-        """ Stop threads by closing the socket """
+        """ Stop threads by closing the socket connection. """
         self.client_socket.close()
 
 
 def main():
     client = SoundBridgeClient(server_port=2025)
+
     client.speaker.start()
     client.microphone.start()
-    input("\n(Press Enter to stop)")
+    input("\n(Press Enter to stop)\n")
 
     client.close()
 
