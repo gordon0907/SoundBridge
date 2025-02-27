@@ -66,8 +66,8 @@ class SoundBridgeClient:
             self.client.send_data(b'')
             try:
                 while True:
-                    data, _ = self.client.receive_data()
-                    stream.write(data)
+                    audio_data: bytes = self.client.receive_data()
+                    stream.write(audio_data)
             except OSError:
                 print("Microphone stopped.")
             finally:
@@ -81,10 +81,12 @@ class SoundBridgeClient:
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
+
+        # Get the loopback device as the speaker's source
         self.loopback_device = self.audio_interface.get_default_wasapi_loopback()
         print(f"Capturing from: {self.loopback_device['name']}")
 
-        # Find Virtual Audio Cable (CABLE Input)
+        # Find Virtual Audio Cable (CABLE Input) for the microphone
         self.virtual_cable_input = None
         for i in range(self.audio_interface.get_device_count()):
             device_info = self.audio_interface.get_device_info_by_index(i)
