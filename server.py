@@ -17,12 +17,15 @@ print(f"{CHUNK_SIZE = } bytes")
 
 class SoundBridgeServer:
     class Speaker(Thread):
+        """ Receives audio from the client and plays it on the system's output device. """
+
         def __init__(self, server):
             super().__init__()
             self.server = server
 
         @override
         def run(self):
+            """ Continuously receives audio data from the client and plays it. """
             stream = self.server.audio_interface.open(
                 format=FORMAT,
                 channels=CHANNELS,
@@ -43,7 +46,7 @@ class SoundBridgeServer:
                 stream.close()
 
     class Microphone(Thread):
-        """ Receives audio data via UDP and outputs it to virtual cable. """
+        """ Captures audio from the system's input device and streams it to the client. """
 
         def __init__(self, server):
             super().__init__()
@@ -51,7 +54,7 @@ class SoundBridgeServer:
 
         @override
         def run(self):
-            """ Continuously receives and outputs to virtual cable. """
+            """ Continuously captures audio and sends it to the client. """
             stream = self.server.audio_interface.open(
                 format=FORMAT,
                 channels=CHANNELS,
@@ -74,7 +77,7 @@ class SoundBridgeServer:
     def __init__(self, server_port: int, server_host: str = ''):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
-        self.client_address = None
+        self.client_address = None  # Set dynamically when data is received
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -86,27 +89,28 @@ class SoundBridgeServer:
         self.microphone = self.Microphone(self)
 
     def send_data(self, data: bytes):
-        """ Sends audio data to the server. """
-        return self.client_address and self.server_socket.sendto(data, self.client_address)
+        """ Sends audio data to the client. """
+        if self.client_address:
+            return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self) -> bytes:
-        """ Receives audio data from the server. """
+        """ Receives audio data from the client and updates the client address. """
         data, self.client_address = self.server_socket.recvfrom(CHUNK_SIZE)
         return data
 
     def close(self):
-        """ Stop threads by closing the socket connection. """
+        """ Stops threads by closing the socket. """
         self.server_socket.close()
 
 
 def main():
-    client = SoundBridgeServer(server_port=2025)
+    server = SoundBridgeServer(server_port=2025)
 
-    client.speaker.start()
-    client.microphone.start()
+    server.speaker.start()
+    server.microphone.start()
     input("\n(Press Enter to stop)\n")
 
-    client.close()
+    server.close()
 
 
 if __name__ == '__main__':
