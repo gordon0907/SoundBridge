@@ -4,15 +4,27 @@ from typing import override
 
 import pyaudiowpatch as pyaudio
 
-# Audio Configuration
-SAMPLE_RATE = 48000  # 48 kHz
-CHANNELS = 2  # Stereo
-FORMAT = pyaudio.paInt16  # 16-bit format
-NUM_FRAMES = 32  # Number of frames per buffer
 
-# Derived Configuration
-CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-print(f"{CHUNK_SIZE = } bytes")
+class SpeakerConfig:
+    SAMPLE_RATE = 48000  # 48 kHz
+    CHANNELS = 2  # Stereo
+    FORMAT = pyaudio.paInt16  # 16-bit format
+    NUM_FRAMES = 32  # Number of frames per buffer
+
+    # Derived Configuration
+    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
+    print(f"Speaker Chunk Size: {CHUNK_SIZE} Bytes")
+
+
+class MicConfig:
+    SAMPLE_RATE = 24000  # 24 kHz
+    CHANNELS = 1  # Mono
+    FORMAT = pyaudio.paInt16  # 16-bit format
+    NUM_FRAMES = 32  # Number of frames per buffer
+
+    # Derived Configuration
+    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
+    print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes")
 
 
 class SoundBridgeClient:
@@ -27,16 +39,16 @@ class SoundBridgeClient:
         def run(self):
             """ Continuously captures and streams audio. """
             stream = self.client.audio_interface.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                format=SpeakerConfig.FORMAT,
+                channels=SpeakerConfig.CHANNELS,
+                rate=SpeakerConfig.SAMPLE_RATE,
                 input=True,
                 input_device_index=self.client.loopback_device['index'],
-                frames_per_buffer=NUM_FRAMES,
+                frames_per_buffer=SpeakerConfig.NUM_FRAMES,
             )
             try:
                 while True:
-                    audio_data: bytes = stream.read(NUM_FRAMES, exception_on_overflow=False)
+                    audio_data: bytes = stream.read(SpeakerConfig.NUM_FRAMES, exception_on_overflow=False)
                     self.client.send_data(audio_data)
             except OSError:
                 print("Speaker stopped.")
@@ -56,9 +68,9 @@ class SoundBridgeClient:
         def run(self):
             """ Continuously receives and outputs to virtual cable. """
             stream = self.client.audio_interface.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                format=MicConfig.FORMAT,
+                channels=MicConfig.CHANNELS,
+                rate=MicConfig.SAMPLE_RATE,
                 output=True,
                 output_device_index=self.client.virtual_cable_input['index'],
             )
@@ -66,7 +78,7 @@ class SoundBridgeClient:
             self.client.send_data(b'')
             try:
                 while True:
-                    audio_data: bytes = self.client.receive_data()
+                    audio_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
                     stream.write(audio_data)
             except OSError:
                 print("Microphone stopped.")
@@ -90,7 +102,7 @@ class SoundBridgeClient:
         self.virtual_cable_input = None
         for i in range(self.audio_interface.get_device_count()):
             device_info = self.audio_interface.get_device_info_by_index(i)
-            if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 2:  # WASAPI
+            if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 0:  # MME
                 self.virtual_cable_input = device_info
                 break
         if self.virtual_cable_input is None:
@@ -104,9 +116,9 @@ class SoundBridgeClient:
         """ Sends audio data to the server. """
         return self.client_socket.sendto(data, self.server_address)
 
-    def receive_data(self) -> bytes:
+    def receive_data(self, size: int) -> bytes:
         """ Receives audio data from the server. """
-        return self.client_socket.recvfrom(CHUNK_SIZE)[0]
+        return self.client_socket.recvfrom(size)[0]
 
     def close(self):
         """ Stops threads by closing the socket. """
