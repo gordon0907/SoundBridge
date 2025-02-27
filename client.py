@@ -109,7 +109,7 @@ class SoundBridgeClient:
         return self.client_socket.recvfrom(CHUNK_SIZE)[0]
 
     def close(self):
-        """ Stop threads by closing the socket connection. """
+        """ Stops threads by closing the socket. """
         self.client_socket.close()
 
 
