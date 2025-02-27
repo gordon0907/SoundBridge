@@ -2,17 +2,29 @@ import socket
 from threading import Thread
 from typing import override
 
-import pyaudiowpatch as pyaudio
+import pyaudio
 
-# Audio Configuration
-SAMPLE_RATE = 48000  # 48 kHz
-CHANNELS = 2  # Stereo
-FORMAT = pyaudio.paInt16  # 16-bit format
-NUM_FRAMES = 32  # Number of frames per buffer
 
-# Derived Configuration
-CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-print(f"{CHUNK_SIZE = } bytes")
+class SpeakerConfig:
+    SAMPLE_RATE = 48000  # 48 kHz
+    CHANNELS = 2  # Stereo
+    FORMAT = pyaudio.paInt16  # 16-bit format
+    NUM_FRAMES = 32  # Number of frames per buffer
+
+    # Derived Configuration
+    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
+    print(f"Speaker Chunk Size: {CHUNK_SIZE} Bytes")
+
+
+class MicConfig:
+    SAMPLE_RATE = 24000  # 24 kHz
+    CHANNELS = 1  # Mono
+    FORMAT = pyaudio.paInt16  # 16-bit format
+    NUM_FRAMES = 32  # Number of frames per buffer
+
+    # Derived Configuration
+    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
+    print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes")
 
 
 class SoundBridgeServer:
@@ -27,16 +39,16 @@ class SoundBridgeServer:
         def run(self):
             """ Continuously receives audio data from the client and plays it. """
             stream = self.server.audio_interface.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                format=SpeakerConfig.FORMAT,
+                channels=SpeakerConfig.CHANNELS,
+                rate=SpeakerConfig.SAMPLE_RATE,
                 output=True,
                 output_device_index=self.server.output_device['index'],
             )
             print("Speaker started.")
             try:
                 while True:
-                    audio_data: bytes = self.server.receive_data()
+                    audio_data: bytes = self.server.receive_data(SpeakerConfig.CHUNK_SIZE)
                     stream.write(audio_data)
             except OSError:
                 print("Speaker stopped.")
@@ -56,16 +68,17 @@ class SoundBridgeServer:
         def run(self):
             """ Continuously captures audio and sends it to the client. """
             stream = self.server.audio_interface.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=SAMPLE_RATE,
+                format=MicConfig.FORMAT,
+                channels=MicConfig.CHANNELS,
+                rate=MicConfig.SAMPLE_RATE,
                 input=True,
                 input_device_index=self.server.input_device['index'],
+                frames_per_buffer=MicConfig.NUM_FRAMES,
             )
             print("Microphone started.")
             try:
                 while True:
-                    audio_data: bytes = stream.read(NUM_FRAMES, exception_on_overflow=False)
+                    audio_data: bytes = stream.read(MicConfig.NUM_FRAMES, exception_on_overflow=False)
                     self.server.send_data(audio_data)
             except OSError:
                 print("Microphone stopped.")
@@ -93,9 +106,9 @@ class SoundBridgeServer:
         if self.client_address:
             return self.server_socket.sendto(data, self.client_address)
 
-    def receive_data(self) -> bytes:
+    def receive_data(self, size: int) -> bytes:
         """ Receives audio data from the client and updates the client address. """
-        data, self.client_address = self.server_socket.recvfrom(CHUNK_SIZE)
+        data, self.client_address = self.server_socket.recvfrom(size)
         return data
 
     def close(self):
