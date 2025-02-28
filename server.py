@@ -17,13 +17,14 @@ class Speaker(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
-        output_device = self.server.audio_interface.get_default_output_device_info()
+        self.device_info = self.server.audio_interface.get_default_output_device_info()
         self.config = AudioConfig(
             audio_format=self.server.FORMAT,
-            channels=output_device['maxOutputChannels'],
-            sample_rate=int(output_device['defaultSampleRate']),
+            channels=self.device_info['maxOutputChannels'],
+            sample_rate=int(self.device_info['defaultSampleRate']),
             num_frames=self.server.NUM_FRAMES,
         )
+        self.server.print_device_info(self)
         self.start()
 
     @override
@@ -35,7 +36,7 @@ class Speaker(Thread):
             rate=self.config.sample_rate,
             output=True,
         )
-        print_("Speaker started.")
+        print_("Speaker started")
         try:
             while True:
                 audio_data: bytes = self.server.receive_data()
@@ -43,7 +44,7 @@ class Speaker(Thread):
         except OSError:
             pass
         finally:
-            print_("Speaker stopped.")
+            print_("Speaker stopped")
 
 
 class Microphone(Thread):
@@ -52,13 +53,14 @@ class Microphone(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
-        input_device = self.server.audio_interface.get_default_input_device_info()
+        self.device_info = self.server.audio_interface.get_default_input_device_info()
         self.config = AudioConfig(
             audio_format=self.server.FORMAT,
-            channels=input_device['maxInputChannels'],
-            sample_rate=int(input_device['defaultSampleRate']),
+            channels=self.device_info['maxInputChannels'],
+            sample_rate=int(self.device_info['defaultSampleRate']),
             num_frames=self.server.NUM_FRAMES,
         )
+        self.server.print_device_info(self)
         self.start()
 
     @override
@@ -71,7 +73,7 @@ class Microphone(Thread):
             input=True,
             frames_per_buffer=self.config.num_frames,
         )
-        print_("Microphone started.")
+        print_("Microphone started")
         try:
             while True:
                 audio_data: bytes = stream.read(self.config.num_frames)
@@ -79,7 +81,7 @@ class Microphone(Thread):
         except OSError:
             pass
         finally:
-            print_("Microphone stopped.")
+            print_("Microphone stopped")
 
 
 class SoundBridgeServer:
@@ -94,7 +96,6 @@ class SoundBridgeServer:
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
-        self.print_devices_name()
 
         # Detect device changes with a multiprocessing event
         self.has_changed = Event()
@@ -112,7 +113,6 @@ class SoundBridgeServer:
         # Instantiate speaker and microphone
         self.speaker: Speaker = Speaker(self)
         self.microphone: Microphone = Microphone(self)
-        self.print_devices_info()
 
     def __enter__(self):
         return self
@@ -142,10 +142,6 @@ class SoundBridgeServer:
         data, self.client_address = self.server_socket.recvfrom(self.UDP_BUFFER_SIZE)
         return data
 
-    def print_devices_name(self):
-        print_(f"Playing to: {self.audio_interface.get_default_output_device_info()['name']}")
-        print_(f"Capturing from: {self.audio_interface.get_default_input_device_info()['name']}")
-
     def reload(self):
         while self.has_changed.wait() and self.is_running:
             self.stop_device_threads()
@@ -153,25 +149,23 @@ class SoundBridgeServer:
 
             self.server_socket = self.init_socket()
             self.audio_interface = pyaudio.PyAudio()
-            self.print_devices_name()
 
             self.speaker = Speaker(self)
             self.microphone = Microphone(self)
-            self.print_devices_info()
 
             self.has_changed.clear()
-
-    def print_devices_info(self):
-        print_(f"<Speaker> Channels: {self.speaker.config.channels} | "
-               f"Sample Rate: {self.speaker.config.sample_rate} kHz")
-        print_(f"<Microphone> Channels: {self.microphone.config.channels} | "
-               f"Sample Rate: {self.microphone.config.sample_rate} kHz")
 
     def stop_device_threads(self):
         """ Stops threads by closing the socket. """
         self.server_socket.close()
         self.speaker.join()
         self.microphone.join()
+
+    @staticmethod
+    def print_device_info(device: Speaker | Microphone):
+        class_name = device.__class__.__name__
+        print_(f"<{class_name}> {device.device_info['name']} | "
+               f"{device.config.sample_rate} kHz {device.config.channels} ch")
 
 
 def device_monitor(signal: Event):
