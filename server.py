@@ -37,7 +37,6 @@ class Speaker(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
-        self.is_running = True
         self.start()
 
     @override
@@ -51,7 +50,7 @@ class Speaker(Thread):
         )
         print("Speaker started.")
         try:
-            while self.is_running:
+            while True:
                 audio_data: bytes = self.server.receive_data(SpeakerConfig.CHUNK_SIZE)
                 stream.write(audio_data)
         except OSError:
@@ -66,7 +65,6 @@ class Microphone(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
-        self.is_running = True
         self.start()
 
     @override
@@ -81,7 +79,7 @@ class Microphone(Thread):
         )
         print("Microphone started.")
         try:
-            while self.is_running:
+            while True:
                 audio_data: bytes = stream.read(MicConfig.NUM_FRAMES)
                 self.server.send_data(audio_data)
         except OSError:
@@ -94,7 +92,7 @@ class SoundBridgeServer:
     def __init__(self, server_port: int, server_host: str = ''):
         self.server_address = server_host, server_port
         self.server_socket = self.init_socket()
-        self.client_address = None  # Set dynamically when data is received
+        self.client_address = "0.0.0.0", server_port  # Set to a valid address when data is received
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -138,8 +136,7 @@ class SoundBridgeServer:
 
     def send_data(self, data: bytes):
         """ Sends data to the client. """
-        if self.client_address is not None:
-            return self.server_socket.sendto(data, self.client_address)
+        return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self, size: int) -> bytes:
         """ Receives data from the client and updates the client address. """
@@ -166,8 +163,6 @@ class SoundBridgeServer:
 
     def stop_device_threads(self):
         """ Stops threads by closing the socket. """
-        self.speaker.is_running = False
-        self.microphone.is_running = False
         self.server_socket.close()
         self.speaker.join()
         self.microphone.join()
