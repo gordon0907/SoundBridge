@@ -133,9 +133,12 @@ class SoundBridgeServer:
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             traceback.print_exception(exc_type, exc_value, traceback)
-        self.stop_devices()
+        self.stop_device_threads()
+
+        # Stop reload helper thread
         self.is_running = False
         self.has_changed.set()
+
         self.device_monitor.terminate()
 
     def init_socket(self) -> socket.socket:
@@ -145,7 +148,7 @@ class SoundBridgeServer:
 
     def send_data(self, data: bytes):
         """ Sends data to the client. """
-        if self.client_address:
+        if self.client_address is not None:
             return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self, size: int) -> bytes:
@@ -164,8 +167,7 @@ class SoundBridgeServer:
 
     def reload(self):
         while self.has_changed.wait() and self.is_running:
-            self.stop_devices()
-            self.audio_interface.terminate()
+            self.stop_device_threads()
 
             self.server_socket = self.init_socket()
             self.set_default_devices()
@@ -176,11 +178,12 @@ class SoundBridgeServer:
 
             self.has_changed.clear()
 
-    def stop_devices(self):
+    def stop_device_threads(self):
         """ Stops threads by closing the socket. """
         self.speaker.is_running = False
         self.microphone.is_running = False
         self.server_socket.close()
+        self.audio_interface.terminate()
         self.speaker.join()
         self.microphone.join()
 
