@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import socket
 
 import pyaudiowpatch as pyaudio
@@ -25,85 +27,77 @@ class MicConfig:
     print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes")
 
 
+class Speaker:
+    """ Captures system audio and streams it via UDP. """
+
+    def __init__(self, client: SoundBridgeClient):
+        self.client: SoundBridgeClient = client
+        self.stream = None
+
+    def callback(self, in_data, frame_count, time_info, status):
+        self.client.send_data(in_data)
+        return in_data, pyaudio.paContinue
+
+    def start(self):
+        """ Restarts the stream if it is already active. """
+        if self.stream is None:
+            self.stream = self.client.audio_interface.open(
+                format=SpeakerConfig.FORMAT,
+                channels=SpeakerConfig.CHANNELS,
+                rate=SpeakerConfig.SAMPLE_RATE,
+                input=True,
+                input_device_index=self.client.loopback_device['index'],
+                frames_per_buffer=SpeakerConfig.NUM_FRAMES,
+                stream_callback=self.callback,
+            )
+            print("Speaker started.")
+        else:
+            self.stop()
+            self.start()
+
+    def stop(self):
+        self.client.stop(self)
+
+
+class Microphone:
+    """ Receives audio data via UDP and outputs it to virtual cable. """
+
+    def __init__(self, client: SoundBridgeClient):
+        self.client: SoundBridgeClient = client
+        self.stream = None
+
+    def callback(self, in_data, frame_count, time_info, status):
+        out_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
+        return out_data, pyaudio.paContinue
+
+    def start(self):
+        """ Restarts the stream if it is already active. """
+        if self.stream is None:
+            self.stream = self.client.audio_interface.open(
+                format=MicConfig.FORMAT,
+                channels=MicConfig.CHANNELS,
+                rate=MicConfig.SAMPLE_RATE,
+                output=True,
+                output_device_index=self.client.virtual_cable_input['index'],
+                frames_per_buffer=MicConfig.NUM_FRAMES,
+                stream_callback=self.callback,
+            )
+            print("Microphone started.")
+        else:
+            self.stop()
+            self.start()
+
+    def stop(self):
+        self.client.stop(self)
+
+
 class SoundBridgeClient:
-    class Speaker:
-        """ Captures system audio and streams it via UDP. """
-
-        def __init__(self, client):
-            super().__init__()
-            self.client = client
-            self.stream = None
-
-        def callback(self, in_data, frame_count, time_info, status):
-            self.client.send_data(in_data)
-            return in_data, pyaudio.paContinue
-
-        def start(self):
-            """ Restarts the stream if it is already active. """
-            if self.stream is None:
-                self.stream = self.client.audio_interface.open(
-                    format=SpeakerConfig.FORMAT,
-                    channels=SpeakerConfig.CHANNELS,
-                    rate=SpeakerConfig.SAMPLE_RATE,
-                    input=True,
-                    input_device_index=self.client.loopback_device['index'],
-                    frames_per_buffer=SpeakerConfig.NUM_FRAMES,
-                    stream_callback=self.callback,
-                )
-                print("Speaker started.")
-            else:
-                self.stop()
-                self.start()
-
-        def stop(self):
-            if self.stream is not None:
-                self.stream.stop_stream()
-                self.stream.close()
-                self.stream = None
-                print("Speaker stopped.")
-
-    class Microphone:
-        """ Receives audio data via UDP and outputs it to virtual cable. """
-
-        def __init__(self, client):
-            super().__init__()
-            self.client = client
-            self.stream = None
-
-        def callback(self, in_data, frame_count, time_info, status):
-            out_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
-            return out_data, pyaudio.paContinue
-
-        def start(self):
-            """ Restarts the stream if it is already active. """
-            if self.stream is None:
-                # Initialize the connection
-                self.client.send_data(b'')
-
-                self.stream = self.client.audio_interface.open(
-                    format=MicConfig.FORMAT,
-                    channels=MicConfig.CHANNELS,
-                    rate=MicConfig.SAMPLE_RATE,
-                    output=True,
-                    output_device_index=self.client.virtual_cable_input['index'],
-                    frames_per_buffer=MicConfig.NUM_FRAMES,
-                    stream_callback=self.callback,
-                )
-                print("Microphone started.")
-            else:
-                self.stop()
-                self.start()
-
-        def stop(self):
-            if self.stream is not None:
-                self.stream.stop_stream()
-                self.stream.close()
-                self.stream = None
-                print("Microphone stopped.")
-
     def __init__(self, server_port: int, server_host: str = "192.168.0.120"):
         self.server_address = (server_host, server_port)
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+
+        # Initialize the connection
+        self.send_data(b'')
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -125,8 +119,8 @@ class SoundBridgeClient:
             print(f"Playing to: {self.virtual_cable_input['name']}")
 
         # Instantiate speaker and microphone
-        self.speaker = self.Speaker(self)
-        self.microphone = self.Microphone(self)
+        self.speaker: Speaker = Speaker(self)
+        self.microphone: Microphone = Microphone(self)
 
     def __del__(self):
         self.audio_interface.terminate()
@@ -139,6 +133,14 @@ class SoundBridgeClient:
     def receive_data(self, size: int) -> bytes:
         """ Receives audio data from the server. """
         return self.client_socket.recvfrom(size)[0]
+
+    @staticmethod
+    def stop(instance: Speaker | Microphone):
+        if instance.stream is not None:
+            instance.stream.stop_stream()
+            instance.stream.close()
+            instance.stream = None
+            print(f"{instance.__class__.__name__} stopped.")
 
 
 def main():
