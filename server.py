@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import socket
-from threading import Thread
-from typing import override
+from contextlib import suppress
 
 import pyaudio
 
@@ -27,66 +28,73 @@ class MicConfig:
     print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes")
 
 
-class SoundBridgeServer:
-    class Speaker(Thread):
-        """ Receives audio from the client and plays it on the system's output device. """
+class Speaker:
+    """ Receives audio from the client and plays it on the system's output device. """
 
-        def __init__(self, server):
-            super().__init__()
-            self.server = server
+    def __init__(self, server: SoundBridgeServer):
+        self.server: SoundBridgeServer = server
+        self.stream = None
 
-        @override
-        def run(self):
-            """ Continuously receives audio data from the client and plays it. """
-            stream = self.server.audio_interface.open(
+    # noinspection PyUnusedLocal
+    def callback(self, in_data, frame_count, time_info, status):
+        out_data: bytes = self.server.receive_data(SpeakerConfig.CHUNK_SIZE)
+        return out_data, pyaudio.paContinue
+
+    def start(self):
+        """ Restarts the stream if it is already active. """
+        if self.stream is None:
+            self.stream = self.server.audio_interface.open(
                 format=SpeakerConfig.FORMAT,
                 channels=SpeakerConfig.CHANNELS,
                 rate=SpeakerConfig.SAMPLE_RATE,
                 output=True,
                 output_device_index=self.server.output_device['index'],
+                frames_per_buffer=SpeakerConfig.NUM_FRAMES,
+                stream_callback=self.callback,
             )
             print("Speaker started.")
-            try:
-                while True:
-                    audio_data: bytes = self.server.receive_data(SpeakerConfig.CHUNK_SIZE)
-                    stream.write(audio_data)
-            except OSError:
-                print("Speaker stopped.")
-            finally:
-                # Ensure resource cleanup
-                stream.stop_stream()
-                stream.close()
+        else:
+            self.stop()
+            self.start()
 
-    class Microphone(Thread):
-        """ Captures audio from the system's input device and streams it to the client. """
+    def stop(self):
+        self.server.stop_device(self)
 
-        def __init__(self, server):
-            super().__init__()
-            self.server = server
 
-        @override
-        def run(self):
-            """ Continuously captures audio and sends it to the client. """
-            stream = self.server.audio_interface.open(
+class Microphone:
+    """ Captures audio from the system's input device and streams it to the client. """
+
+    def __init__(self, server: SoundBridgeServer):
+        self.server: SoundBridgeServer = server
+        self.stream = None
+
+    # noinspection PyUnusedLocal
+    def callback(self, in_data, frame_count, time_info, status):
+        self.server.send_data(in_data)
+        return in_data, pyaudio.paContinue
+
+    def start(self):
+        """ Restarts the stream if it is already active. """
+        if self.stream is None:
+            self.stream = self.server.audio_interface.open(
                 format=MicConfig.FORMAT,
                 channels=MicConfig.CHANNELS,
                 rate=MicConfig.SAMPLE_RATE,
                 input=True,
                 input_device_index=self.server.input_device['index'],
                 frames_per_buffer=MicConfig.NUM_FRAMES,
+                stream_callback=self.callback,
             )
             print("Microphone started.")
-            try:
-                while True:
-                    audio_data: bytes = stream.read(MicConfig.NUM_FRAMES, exception_on_overflow=False)
-                    self.server.send_data(audio_data)
-            except OSError:
-                print("Microphone stopped.")
-            finally:
-                # Ensure resource cleanup
-                stream.stop_stream()
-                stream.close()
+        else:
+            self.stop()
+            self.start()
 
+    def stop(self):
+        self.server.stop_device(self)
+
+
+class SoundBridgeServer:
     def __init__(self, server_port: int, server_host: str = ''):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
@@ -97,33 +105,48 @@ class SoundBridgeServer:
         self.output_device = self.audio_interface.get_default_output_device_info()
         self.input_device = self.audio_interface.get_default_input_device_info()
 
-        # Initialize speaker and microphone threads
-        self.speaker = self.Speaker(self)
-        self.microphone = self.Microphone(self)
+        print(f"Playing to: {self.output_device['name']}")
+        print(f"Capturing from: {self.input_device['name']}")
+
+        # Instantiate speaker and microphone
+        self.speaker: Speaker = Speaker(self)
+        self.microphone: Microphone = Microphone(self)
+
+    def __del__(self):
+        self.audio_interface.terminate()
+        self.server_socket.close()
 
     def send_data(self, data: bytes):
-        """ Sends audio data to the client. """
+        """ Sends data to the client. """
         if self.client_address:
             return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self, size: int) -> bytes:
-        """ Receives audio data from the client and updates the client address. """
+        """ Receives data from the client and updates the client address. """
         data, self.client_address = self.server_socket.recvfrom(size)
         return data
 
-    def close(self):
-        """ Stops threads by closing the socket. """
-        self.server_socket.close()
+    @staticmethod
+    def stop_device(instance: Speaker | Microphone):
+        if instance.stream is not None:
+            with suppress(OSError):
+                instance.stream.stop_stream()
+            instance.stream.close()
+            instance.stream = None
+            print(f"{instance.__class__.__name__} stopped.")
 
 
 def main():
+    print()
     server = SoundBridgeServer(server_port=2025)
+    print()
 
     server.speaker.start()
     server.microphone.start()
     input("\n(Press Enter to stop)\n")
 
-    server.close()
+    server.speaker.stop()
+    server.microphone.stop()
 
 
 if __name__ == '__main__':

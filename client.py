@@ -130,11 +130,11 @@ class SoundBridgeClient:
         self.client_socket.close()
 
     def send_data(self, data: bytes):
-        """ Sends audio data to the server. """
+        """ Sends data to the server. """
         return self.client_socket.sendto(data, self.server_address)
 
     def receive_data(self, size: int) -> bytes:
-        """ Receives audio data from the server. """
+        """ Receives data from the server. """
         return self.client_socket.recvfrom(size)[0]
 
     @staticmethod
