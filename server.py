@@ -4,6 +4,7 @@ import socket
 import time
 from contextlib import suppress
 from multiprocessing import Event, Process
+from threading import Thread
 
 import pyaudio
 
@@ -103,20 +104,23 @@ class SoundBridgeServer:
         self.client_address = None  # Set dynamically when data is received
 
         # Initialize audio interface
-        self.audio_interface = pyaudio.PyAudio()
-        self.output_device = self.audio_interface.get_default_output_device_info()
-        self.input_device = self.audio_interface.get_default_input_device_info()
+        self.audio_interface, self.output_device, self.input_device = None, None, None
+        self.set_default_devices()
         self.print_current_devices()
 
         # Detect device changes with a multiprocessing event
-        self.changed_event = Event()
+        self.has_changed = Event()
         self.device_monitor = Process(target=device_monitor,
-                                      args=(self.changed_event, self.output_device, self.input_device))
+                                      args=(self.has_changed, self.output_device, self.input_device))
         self.device_monitor.start()
 
         # Wait for the process to fully initialize
-        self.changed_event.wait()
-        self.changed_event.clear()
+        self.has_changed.wait()
+        self.has_changed.clear()
+
+        # Auto reload if the device changes
+        self.is_running: bool = True
+        Thread(target=self.reload).start()
 
         # Instantiate speaker and microphone
         self.speaker: Speaker = Speaker(self)
@@ -128,6 +132,8 @@ class SoundBridgeServer:
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             traceback.print_exception(exc_type, exc_value, traceback)
+        self.is_running = False
+        self.has_changed.set()
         self.device_monitor.terminate()
 
     def send_data(self, data: bytes):
@@ -140,10 +146,25 @@ class SoundBridgeServer:
         data, self.client_address = self.server_socket.recvfrom(size)
         return data
 
+    def set_default_devices(self):
+        self.audio_interface = pyaudio.PyAudio()
+        self.output_device = self.audio_interface.get_default_output_device_info()
+        self.input_device = self.audio_interface.get_default_input_device_info()
+
     def print_current_devices(self):
-        print(f"Playing to: {self.output_device['name']}")
+        print(f"\nPlaying to: {self.output_device['name']}")
         print(f"Capturing from: {self.input_device['name']}")
-        print()
+
+    def reload(self):
+        while self.has_changed.wait() and self.is_running:
+            self.audio_interface.terminate()
+            self.set_default_devices()
+            self.print_current_devices()
+
+            self.speaker.start()
+            self.microphone.start()
+
+            self.has_changed.clear()
 
     @staticmethod
     def stop_device(instance: Speaker | Microphone):
@@ -163,7 +184,6 @@ def device_monitor(signal: Event, init_output_device, init_input_device):
     current_input_device = init_input_device
 
     while time.sleep(0.5) or True:
-        print("Debug running", time.time())
         audio_interface = pyaudio.PyAudio()
         output_device = audio_interface.get_default_output_device_info()
         input_device = audio_interface.get_default_input_device_info()
