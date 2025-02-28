@@ -8,27 +8,7 @@ from typing import override
 
 import pyaudio
 
-
-class SpeakerConfig:
-    SAMPLE_RATE = 48000  # 48 kHz
-    CHANNELS = 2  # Stereo
-    FORMAT = pyaudio.paInt16  # 16-bit format
-    NUM_FRAMES = 32  # Number of frames per buffer
-
-    # Derived Configuration
-    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-    # print(f"Speaker Chunk Size: {CHUNK_SIZE} Bytes")
-
-
-class MicConfig:
-    SAMPLE_RATE = 24000  # 24 kHz
-    CHANNELS = 1  # Mono
-    FORMAT = pyaudio.paInt16  # 16-bit format
-    NUM_FRAMES = 32  # Number of frames per buffer
-
-    # Derived Configuration
-    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-    # print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes\n")
+from miscellaneous import *
 
 
 class Speaker(Thread):
@@ -37,26 +17,33 @@ class Speaker(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
+        output_device = self.server.audio_interface.get_default_output_device_info()
+        self.config = AudioConfig(
+            audio_format=self.server.FORMAT,
+            channels=output_device['maxOutputChannels'],
+            sample_rate=int(output_device['defaultSampleRate']),
+            num_frames=self.server.NUM_FRAMES,
+        )
         self.start()
 
     @override
     def run(self):
         """ Continuously receives audio data from the client and plays it. """
         stream = self.server.audio_interface.open(
-            format=SpeakerConfig.FORMAT,
-            channels=SpeakerConfig.CHANNELS,
-            rate=SpeakerConfig.SAMPLE_RATE,
+            format=self.config.audio_format,
+            channels=self.config.channels,
+            rate=self.config.sample_rate,
             output=True,
         )
-        print("Speaker started.")
+        print_("Speaker started.")
         try:
             while True:
-                audio_data: bytes = self.server.receive_data(SpeakerConfig.CHUNK_SIZE)
+                audio_data: bytes = self.server.receive_data()
                 stream.write(audio_data)
         except OSError:
             pass
         finally:
-            print("Speaker stopped.")
+            print_("Speaker stopped.")
 
 
 class Microphone(Thread):
@@ -65,30 +52,41 @@ class Microphone(Thread):
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
+        input_device = self.server.audio_interface.get_default_input_device_info()
+        self.config = AudioConfig(
+            audio_format=self.server.FORMAT,
+            channels=input_device['maxInputChannels'],
+            sample_rate=int(input_device['defaultSampleRate']),
+            num_frames=self.server.NUM_FRAMES,
+        )
         self.start()
 
     @override
     def run(self):
         """ Continuously captures audio and sends it to the client. """
         stream = self.server.audio_interface.open(
-            format=MicConfig.FORMAT,
-            channels=MicConfig.CHANNELS,
-            rate=MicConfig.SAMPLE_RATE,
+            format=self.config.audio_format,
+            channels=self.config.channels,
+            rate=self.config.sample_rate,
             input=True,
-            frames_per_buffer=MicConfig.NUM_FRAMES,
+            frames_per_buffer=self.config.num_frames,
         )
-        print("Microphone started.")
+        print_("Microphone started.")
         try:
             while True:
-                audio_data: bytes = stream.read(MicConfig.NUM_FRAMES)
+                audio_data: bytes = stream.read(self.config.num_frames)
                 self.server.send_data(audio_data)
         except OSError:
             pass
         finally:
-            print("Microphone stopped.")
+            print_("Microphone stopped.")
 
 
 class SoundBridgeServer:
+    UDP_BUFFER_SIZE = 1024
+    FORMAT = pyaudio.paInt16  # 16-bit format
+    NUM_FRAMES = 32  # Number of frames per buffer
+
     def __init__(self, server_port: int, server_host: str = ''):
         self.server_address = server_host, server_port
         self.server_socket = self.init_socket()
@@ -96,7 +94,7 @@ class SoundBridgeServer:
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
-        self.print_current_devices()
+        self.print_devices_name()
 
         # Detect device changes with a multiprocessing event
         self.has_changed = Event()
@@ -114,6 +112,7 @@ class SoundBridgeServer:
         # Instantiate speaker and microphone
         self.speaker: Speaker = Speaker(self)
         self.microphone: Microphone = Microphone(self)
+        self.print_devices_info()
 
     def __enter__(self):
         return self
@@ -138,14 +137,14 @@ class SoundBridgeServer:
         """ Sends data to the client. """
         return self.server_socket.sendto(data, self.client_address)
 
-    def receive_data(self, size: int) -> bytes:
+    def receive_data(self) -> bytes:
         """ Receives data from the client and updates the client address. """
-        data, self.client_address = self.server_socket.recvfrom(size)
+        data, self.client_address = self.server_socket.recvfrom(self.UDP_BUFFER_SIZE)
         return data
 
-    def print_current_devices(self):
-        print(f"\nPlaying to: {self.audio_interface.get_default_output_device_info()['name']}")
-        print(f"Capturing from: {self.audio_interface.get_default_input_device_info()['name']}")
+    def print_devices_name(self):
+        print_(f"Playing to: {self.audio_interface.get_default_output_device_info()['name']}")
+        print_(f"Capturing from: {self.audio_interface.get_default_input_device_info()['name']}")
 
     def reload(self):
         while self.has_changed.wait() and self.is_running:
@@ -154,12 +153,19 @@ class SoundBridgeServer:
 
             self.server_socket = self.init_socket()
             self.audio_interface = pyaudio.PyAudio()
-            self.print_current_devices()
+            self.print_devices_name()
 
             self.speaker = Speaker(self)
             self.microphone = Microphone(self)
+            self.print_devices_info()
 
             self.has_changed.clear()
+
+    def print_devices_info(self):
+        print_(f"<Speaker> Channels: {self.speaker.config.channels} | "
+               f"Sample Rate: {self.speaker.config.sample_rate} kHz")
+        print_(f"<Microphone> Channels: {self.microphone.config.channels} | "
+               f"Sample Rate: {self.microphone.config.sample_rate} kHz")
 
     def stop_device_threads(self):
         """ Stops threads by closing the socket. """
@@ -187,7 +193,7 @@ def device_monitor(signal: Event):
 
 def main():
     with SoundBridgeServer(server_port=2025) as server:
-        input("\n(Press Enter to stop)\n\n")
+        input()
 
 
 if __name__ == '__main__':
