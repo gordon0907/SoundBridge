@@ -28,34 +28,41 @@ class MicConfig:
 
 
 class SoundBridgeClient:
-    class Speaker(Thread):
+    class Speaker:
         """ Captures system audio and streams it via UDP. """
 
         def __init__(self, client):
             super().__init__()
             self.client = client
+            self.stream = None
 
-        @override
-        def run(self):
-            """ Continuously captures and streams audio. """
-            stream = self.client.audio_interface.open(
-                format=SpeakerConfig.FORMAT,
-                channels=SpeakerConfig.CHANNELS,
-                rate=SpeakerConfig.SAMPLE_RATE,
-                input=True,
-                input_device_index=self.client.loopback_device['index'],
-                frames_per_buffer=SpeakerConfig.NUM_FRAMES,
-            )
-            try:
-                while True:
-                    audio_data: bytes = stream.read(SpeakerConfig.NUM_FRAMES, exception_on_overflow=False)
-                    self.client.send_data(audio_data)
-            except OSError:
+        def callback(self, in_data, frame_count, time_info, status):
+            self.client.send_data(in_data)
+            return in_data, pyaudio.paContinue
+
+        def start(self):
+            """ Restarts the stream if it is already active. """
+            if self.stream is None:
+                self.stream = self.client.audio_interface.open(
+                    format=SpeakerConfig.FORMAT,
+                    channels=SpeakerConfig.CHANNELS,
+                    rate=SpeakerConfig.SAMPLE_RATE,
+                    input=True,
+                    input_device_index=self.client.loopback_device['index'],
+                    frames_per_buffer=SpeakerConfig.NUM_FRAMES,
+                    stream_callback=self.callback,
+                )
+                print("Speaker started.")
+            else:
+                self.stop()
+                self.start()
+
+        def stop(self):
+            if self.stream is not None:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
                 print("Speaker stopped.")
-            finally:
-                # Ensure resource cleanup
-                stream.stop_stream()
-                stream.close()
 
     class Microphone(Thread):
         """ Receives audio data via UDP and outputs it to virtual cable. """
