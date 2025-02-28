@@ -48,7 +48,6 @@ class Speaker(Thread):
             channels=SpeakerConfig.CHANNELS,
             rate=SpeakerConfig.SAMPLE_RATE,
             output=True,
-            output_device_index=self.server.output_device['index'],
         )
         print("Speaker started.")
         try:
@@ -58,9 +57,6 @@ class Speaker(Thread):
         except OSError:
             pass
         finally:
-            # Ensure resource cleanup
-            stream.stop_stream()
-            stream.close()
             print("Speaker stopped.")
 
 
@@ -81,20 +77,16 @@ class Microphone(Thread):
             channels=MicConfig.CHANNELS,
             rate=MicConfig.SAMPLE_RATE,
             input=True,
-            input_device_index=self.server.input_device['index'],
             frames_per_buffer=MicConfig.NUM_FRAMES,
         )
         print("Microphone started.")
         try:
             while self.is_running:
-                audio_data: bytes = stream.read(MicConfig.NUM_FRAMES, exception_on_overflow=False)
+                audio_data: bytes = stream.read(MicConfig.NUM_FRAMES)
                 self.server.send_data(audio_data)
         except OSError:
             pass
         finally:
-            # Ensure resource cleanup
-            stream.stop_stream()
-            stream.close()
             print("Microphone stopped.")
 
 
@@ -105,14 +97,12 @@ class SoundBridgeServer:
         self.client_address = None  # Set dynamically when data is received
 
         # Initialize audio interface
-        self.audio_interface, self.output_device, self.input_device = None, None, None
-        self.set_default_devices()
+        self.audio_interface = pyaudio.PyAudio()
         self.print_current_devices()
 
         # Detect device changes with a multiprocessing event
         self.has_changed = Event()
-        self.device_monitor = Process(target=device_monitor,
-                                      args=(self.has_changed, self.output_device, self.input_device))
+        self.device_monitor = Process(target=device_monitor, args=(self.has_changed,))
         self.device_monitor.start()
 
         # Wait for the process to fully initialize
@@ -156,21 +146,17 @@ class SoundBridgeServer:
         data, self.client_address = self.server_socket.recvfrom(size)
         return data
 
-    def set_default_devices(self):
-        self.audio_interface = pyaudio.PyAudio()
-        self.output_device = self.audio_interface.get_default_output_device_info()
-        self.input_device = self.audio_interface.get_default_input_device_info()
-
     def print_current_devices(self):
-        print(f"\nPlaying to: {self.output_device['name']}")
-        print(f"Capturing from: {self.input_device['name']}")
+        print(f"\nPlaying to: {self.audio_interface.get_default_output_device_info()['name']}")
+        print(f"Capturing from: {self.audio_interface.get_default_input_device_info()['name']}")
 
     def reload(self):
         while self.has_changed.wait() and self.is_running:
             self.stop_device_threads()
+            self.audio_interface.terminate()
 
             self.server_socket = self.init_socket()
-            self.set_default_devices()
+            self.audio_interface = pyaudio.PyAudio()
             self.print_current_devices()
 
             self.speaker = Speaker(self)
@@ -183,17 +169,13 @@ class SoundBridgeServer:
         self.speaker.is_running = False
         self.microphone.is_running = False
         self.server_socket.close()
-        self.audio_interface.terminate()
         self.speaker.join()
         self.microphone.join()
 
 
-def device_monitor(signal: Event, init_output_device, init_input_device):
+def device_monitor(signal: Event):
     """ The check must be performed in another process, as PyAudio must be terminated to detect device changes. """
-
-    signal.set()
-    current_output_device = init_output_device
-    current_input_device = init_input_device
+    current_output_device, current_input_device = None, None
 
     while time.sleep(0.5) or True:
         audio_interface = pyaudio.PyAudio()
@@ -210,7 +192,7 @@ def device_monitor(signal: Event, init_output_device, init_input_device):
 
 def main():
     with SoundBridgeServer(server_port=2025) as server:
-        input("\n(Press Enter to stop)\n")
+        input("\n(Press Enter to stop)\n\n")
 
 
 if __name__ == '__main__':

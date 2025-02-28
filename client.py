@@ -4,6 +4,7 @@ import socket
 from threading import Thread
 from typing import override
 
+import numpy as np
 import pyaudiowpatch as pyaudio
 
 
@@ -35,12 +36,18 @@ class Speaker(Thread):
     def __init__(self, client: SoundBridgeClient):
         super().__init__()
         self.client: SoundBridgeClient = client
-        self.is_running = True
         self.start()
 
     @override
     def run(self):
         """ Continuously captures and streams audio. """
+        helper_stream = self.client.audio_interface.open(
+            format=SpeakerConfig.FORMAT,
+            channels=SpeakerConfig.CHANNELS,
+            rate=SpeakerConfig.SAMPLE_RATE,
+            output=True,
+        )  # To keep source stream awake
+        dummy_audio_data = np.zeros((1, SpeakerConfig.CHANNELS)).tobytes()
         stream = self.client.audio_interface.open(
             format=SpeakerConfig.FORMAT,
             channels=SpeakerConfig.CHANNELS,
@@ -51,15 +58,13 @@ class Speaker(Thread):
         )
         print("Speaker started.")
         try:
-            while self.is_running:
-                audio_data: bytes = stream.read(SpeakerConfig.NUM_FRAMES, exception_on_overflow=False)
+            while True:
+                helper_stream.write(dummy_audio_data)
+                audio_data: bytes = stream.read(SpeakerConfig.NUM_FRAMES)
                 self.client.send_data(audio_data)
         except OSError:
             pass
         finally:
-            # Ensure resource cleanup
-            stream.stop_stream()
-            stream.close()
             print("Speaker stopped.")
 
 
@@ -69,7 +74,6 @@ class Microphone(Thread):
     def __init__(self, client: SoundBridgeClient):
         super().__init__()
         self.client: SoundBridgeClient = client
-        self.is_running = True
         self.start()
 
     @override
@@ -84,15 +88,12 @@ class Microphone(Thread):
         )
         print("Microphone started.")
         try:
-            while self.is_running:
+            while True:
                 audio_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
                 stream.write(audio_data)
         except OSError:
             pass
         finally:
-            # Ensure resource cleanup
-            stream.stop_stream()
-            stream.close()
             print("Microphone stopped.")
 
 
@@ -151,17 +152,14 @@ class SoundBridgeClient:
 
     def stop_device_threads(self):
         """ Stops threads by closing the socket. """
-        self.speaker.is_running = False
-        self.microphone.is_running = False
         self.client_socket.close()
-        self.audio_interface.terminate()
         self.speaker.join()
         self.microphone.join()
 
 
 def main():
     with SoundBridgeClient(server_port=2025) as client:
-        input("\n(Press Enter to stop)\n")
+        input("\n(Press Enter to stop)\n\n")
 
 
 if __name__ == '__main__':
