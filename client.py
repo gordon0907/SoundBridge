@@ -121,10 +121,16 @@ class SoundBridgeClient:
                 break
         if self.virtual_cable_input is None:
             raise RuntimeError("No CABLE Input device found.")
+        else:
+            print(f"Playing to: {self.virtual_cable_input['name']}")
 
-        # Initialize speaker and microphone threads
+        # Instantiate speaker and microphone
         self.speaker = self.Speaker(self)
         self.microphone = self.Microphone(self)
+
+    def __del__(self):
+        self.audio_interface.terminate()
+        self.client_socket.close()
 
     def send_data(self, data: bytes):
         """ Sends audio data to the server. """
@@ -134,19 +140,18 @@ class SoundBridgeClient:
         """ Receives audio data from the server. """
         return self.client_socket.recvfrom(size)[0]
 
-    def close(self):
-        """ Stops threads by closing the socket. """
-        self.client_socket.close()
-
 
 def main():
+    print()
     client = SoundBridgeClient(server_port=2025)
+    print()
 
     client.speaker.start()
     client.microphone.start()
     input("\n(Press Enter to stop)\n")
 
-    client.close()
+    client.speaker.stop()
+    client.microphone.stop()
 
 
 if __name__ == '__main__':
