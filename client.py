@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+from contextlib import suppress
 
 import pyaudiowpatch as pyaudio
 
@@ -34,6 +35,7 @@ class Speaker:
         self.client: SoundBridgeClient = client
         self.stream = None
 
+    # noinspection PyUnusedLocal
     def callback(self, in_data, frame_count, time_info, status):
         self.client.send_data(in_data)
         return in_data, pyaudio.paContinue
@@ -56,7 +58,7 @@ class Speaker:
             self.start()
 
     def stop(self):
-        self.client.stop(self)
+        self.client.stop_device(self)
 
 
 class Microphone:
@@ -66,6 +68,7 @@ class Microphone:
         self.client: SoundBridgeClient = client
         self.stream = None
 
+    # noinspection PyUnusedLocal
     def callback(self, in_data, frame_count, time_info, status):
         out_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
         return out_data, pyaudio.paContinue
@@ -88,7 +91,7 @@ class Microphone:
             self.start()
 
     def stop(self):
-        self.client.stop(self)
+        self.client.stop_device(self)
 
 
 class SoundBridgeClient:
@@ -135,9 +138,10 @@ class SoundBridgeClient:
         return self.client_socket.recvfrom(size)[0]
 
     @staticmethod
-    def stop(instance: Speaker | Microphone):
+    def stop_device(instance: Speaker | Microphone):
         if instance.stream is not None:
-            instance.stream.stop_stream()
+            with suppress(OSError):
+                instance.stream.stop_stream()
             instance.stream.close()
             instance.stream = None
             print(f"{instance.__class__.__name__} stopped.")
