@@ -1,6 +1,4 @@
 import socket
-from threading import Thread
-from typing import override
 
 import pyaudiowpatch as pyaudio
 
@@ -64,35 +62,44 @@ class SoundBridgeClient:
                 self.stream = None
                 print("Speaker stopped.")
 
-    class Microphone(Thread):
+    class Microphone:
         """ Receives audio data via UDP and outputs it to virtual cable. """
 
         def __init__(self, client):
             super().__init__()
             self.client = client
+            self.stream = None
 
-        @override
-        def run(self):
-            """ Continuously receives and outputs to virtual cable. """
-            stream = self.client.audio_interface.open(
-                format=MicConfig.FORMAT,
-                channels=MicConfig.CHANNELS,
-                rate=MicConfig.SAMPLE_RATE,
-                output=True,
-                output_device_index=self.client.virtual_cable_input['index'],
-            )
-            # Initialize the connection
-            self.client.send_data(b'')
-            try:
-                while True:
-                    audio_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
-                    stream.write(audio_data)
-            except OSError:
+        def callback(self, in_data, frame_count, time_info, status):
+            out_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
+            return out_data, pyaudio.paContinue
+
+        def start(self):
+            """ Restarts the stream if it is already active. """
+            if self.stream is None:
+                # Initialize the connection
+                self.client.send_data(b'')
+
+                self.stream = self.client.audio_interface.open(
+                    format=MicConfig.FORMAT,
+                    channels=MicConfig.CHANNELS,
+                    rate=MicConfig.SAMPLE_RATE,
+                    output=True,
+                    output_device_index=self.client.virtual_cable_input['index'],
+                    frames_per_buffer=MicConfig.NUM_FRAMES,
+                    stream_callback=self.callback,
+                )
+                print("Microphone started.")
+            else:
+                self.stop()
+                self.start()
+
+        def stop(self):
+            if self.stream is not None:
+                self.stream.stop_stream()
+                self.stream.close()
+                self.stream = None
                 print("Microphone stopped.")
-            finally:
-                # Ensure resource cleanup
-                stream.stop_stream()
-                stream.close()
 
     def __init__(self, server_port: int, server_host: str = "192.168.0.120"):
         self.server_address = (server_host, server_port)
