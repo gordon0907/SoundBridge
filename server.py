@@ -8,7 +8,11 @@ from typing import override
 
 import pyaudio
 
+from control_channel import ControlChannelServer
 from miscellaneous import *
+
+SERVER_PORT = 2024
+CONTROL_PORT = 2025
 
 
 class Speaker(Thread):
@@ -114,11 +118,17 @@ class SoundBridgeServer:
     FORMAT = pyaudio.paInt16  # 16-bit format
     NUM_FRAMES = 32  # Number of frames per buffer
 
-    def __init__(self, server_port: int, server_host: str = ''):
+    def __init__(self, server_port: int, control_port: int, server_host: str = ''):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
         self.server_socket.settimeout(self.TIMEOUT)
-        self.client_address = "0.0.0.0", server_port  # Set to a valid address when data is received
+        print_(f"UDP listener started on port {server_port}")
+
+        # Set to an invalid placeholder; will be updated with a valid address upon receiving data
+        self.client_address = "0.0.0.0", server_port
+
+        # Initialize TCP control channel server
+        self.control = ControlChannelServer(self, control_port, server_host)
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -173,6 +183,7 @@ class SoundBridgeServer:
             self.speaker = Speaker(self)
             self.microphone = Microphone(self)
 
+            self.control.notify_client()
             is_speaker_on and self.speaker.start()
             is_microphone_on and self.microphone.start()
 
@@ -203,7 +214,7 @@ def device_monitor(signal: Event):
 
 
 def main():
-    with SoundBridgeServer(server_port=2025) as server:
+    with SoundBridgeServer(SERVER_PORT, CONTROL_PORT) as server:
         server.speaker.start()
         server.microphone.start()
         input()
