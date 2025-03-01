@@ -1,4 +1,5 @@
 import socket
+from contextlib import suppress
 from threading import Thread
 
 from miscellaneous import *
@@ -60,7 +61,8 @@ class ControlChannelServer:
 
     def notify_client(self):
         def thread():
-            if self.conn is not None:
+            # Best effort, regardless of failure
+            with suppress(Exception):
                 self.conn.sendall(b'RESET')
                 print_("Sent RESET to client")
 
