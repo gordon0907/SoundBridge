@@ -15,22 +15,29 @@ class ControlChannelServer:
         self.server_socket.listen()  # No pending client queue
         print_(f"TCP listener started on port {control_port}")
 
-        self.conn: socket.socket | None = None
-        self.addr: tuple = ()
+        self.conn, self.addr = None, None
+        Thread(target=self.connection_handler, daemon=True).start()
 
-        Thread(target=self.request_handler, daemon=True).start()
+        # Instantiate `request_handler` thread
+        self.request_handler_thread = Thread(target=self.request_handler, daemon=True)
 
-    def request_handler(self):
+    def connection_handler(self):
         while True:
             conn, addr = self.server_socket.accept()
 
             # Maintain only one connection at a time
-            if addr != self.addr:
-                if self.conn is not None:
-                    self.conn.close()
-                self.conn, self.addr = conn, addr
+            if self.conn is not None:
+                self.conn.close()
+                print(f"Closed connection with {':'.join(self.addr)}")
+            self.conn, self.addr = conn, addr
+            print(f"Connected with {':'.join(self.addr)}")
 
-            data: bytes = conn.recv(TCP_BUFFER_SIZE)
+            if not self.request_handler_thread.is_alive():
+                self.request_handler_thread.start()
+
+    def request_handler(self):
+        while True:
+            data: bytes = self.conn.recv(TCP_BUFFER_SIZE)
             match data:
                 case b'SPEAKER_CONFIG':
                     config = self.app_server.speaker.config
