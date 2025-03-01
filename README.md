@@ -58,8 +58,9 @@ it is!
 
 ## Controls
 
-- **Toggle microphone usage on the client**: Press `Enter` in the console (maybe useful for saving AirPods battery).
-- **Terminate client**: Type `q` and press `Enter`.
+- **Toggle microphone usage on the client**: Type `m` and press `Enter` in the console (useful for saving AirPods
+  battery).
+- **Terminate client**: Press `Enter` in the console.
 - **Stop the server**: Press `Enter` in the console.
 
 ## Notes
