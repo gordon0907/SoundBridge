@@ -53,11 +53,11 @@ class ControlChannelServer:
                     self.conn.sendall(config.to_bytes())
                     print_("Sent MICROPHONE_CONFIG to client")
                 case b'TOGGLE_MICROPHONE':
-                    if self.app_server.microphone.is_active():
+                    if self.app_server.microphone.is_alive():
                         self.app_server.microphone.stop()
                     else:
                         self.app_server.microphone.start()
-                    self.conn.sendall(b'MIC ON' if self.app_server.microphone.is_active() else b'MIC OFF')
+                    self.conn.sendall(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF')
 
     def notify_client(self):
         def thread():
