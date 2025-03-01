@@ -172,7 +172,7 @@ def main():
     control_client = ControlChannelClient(SERVER_HOST, CONTROL_PORT)
     Thread(target=thread, daemon=True).start()
 
-    while input().lower() != 'q':
+    while input().lower() == 'm':
         control_client.toggle_microphone()
 
 
