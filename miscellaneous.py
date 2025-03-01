@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pickle
 from datetime import datetime
 
@@ -13,8 +15,11 @@ class AudioConfig:
         return pickle.dumps(self)
 
     @staticmethod
-    def from_bytes(bytes_):
-        return pickle.loads(bytes_)
+    def from_bytes(bytes_) -> AudioConfig | None:
+        try:
+            return pickle.loads(bytes_)
+        except pickle.UnpicklingError:
+            return None
 
 
 class Color:
