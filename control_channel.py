@@ -28,16 +28,20 @@ class ControlChannelServer:
             # Maintain only one connection at a time
             if self.conn is not None:
                 self.conn.close()
-                print(f"Closed connection with {':'.join(self.addr)}")
+                print_(f"Closed connection with {self.addr[0]}:{self.addr[1]}")
             self.conn, self.addr = conn, addr
-            print(f"Connected with {':'.join(self.addr)}")
+            print_(f"Connected with {self.addr[0]}:{self.addr[1]}")
 
             if not self.request_handler_thread.is_alive():
                 self.request_handler_thread.start()
 
     def request_handler(self):
         while True:
-            data: bytes = self.conn.recv(TCP_BUFFER_SIZE)
+            try:
+                data: bytes = self.conn.recv(TCP_BUFFER_SIZE)
+            except OSError:  # Exception on connection change
+                continue
+
             match data:
                 case b'SPEAKER_CONFIG':
                     config = self.app_server.speaker.config
