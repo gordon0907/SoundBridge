@@ -17,5 +17,11 @@ class AudioConfig:
         return pickle.loads(bytes_)
 
 
+class Color:
+    GREEN = '\033[32m'
+    RED = '\033[31m'
+    RESET = '\033[0m'
+
+
 def print_(*args, **kwargs):
     return print(f"[{datetime.now().isoformat()}]", *args, **kwargs)

@@ -12,11 +12,15 @@ from miscellaneous import *
 
 
 class Speaker(Thread):
-    """ Receives audio from the client and plays it on the system's output device. """
+    """
+    Continuously receives audio data from the client and plays it on the system's default output device.
+    """
 
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
+
+        # Get default output device info
         self.device_info = self.server.audio_interface.get_default_output_device_info()
         self.config = AudioConfig(
             audio_format=self.server.FORMAT,
@@ -24,35 +28,47 @@ class Speaker(Thread):
             sample_rate=int(self.device_info['defaultSampleRate']),
             num_frames=self.server.NUM_FRAMES,
         )
-        self.server.print_device_info(self)
-        self.start()
+
+        self.stream = None
 
     @override
     def run(self):
-        """ Continuously receives audio data from the client and plays it. """
-        stream = self.server.audio_interface.open(
+        # Create audio stream instance
+        self.stream = self.server.audio_interface.open(
             format=self.config.audio_format,
             channels=self.config.channels,
             rate=self.config.sample_rate,
             output=True,
         )
-        print_("Speaker started")
-        try:
-            while True:
+        print_(f"{Color.GREEN}Speaker started{Color.RESET}")
+        self.server.print_device_info(self)
+
+        while self.stream is not None:
+            try:
                 audio_data: bytes = self.server.receive_data()
-                stream.write(audio_data)
-        except OSError:
-            pass
-        finally:
-            print_("Speaker stopped")
+                self.stream.write(audio_data)
+            except (OSError, AttributeError):  # Includes TimeoutError
+                pass
+        print_(f"{Color.RED}Speaker stopped{Color.RESET}")
+
+    def stop(self):
+        """ Stop the thread and ensure it can be started again. """
+        if self.is_alive():
+            self.stream = None
+            self.join()
+            self.server.speaker = Speaker(self.server)  # Ready for the next start
 
 
 class Microphone(Thread):
-    """ Captures audio from the system's input device and streams it to the client. """
+    """
+    Continuously captures audio from the system's input device and sends it to the client.
+    """
 
     def __init__(self, server: SoundBridgeServer):
         super().__init__()
         self.server: SoundBridgeServer = server
+
+        # Get default input device info
         self.device_info = self.server.audio_interface.get_default_input_device_info()
         self.config = AudioConfig(
             audio_format=self.server.FORMAT,
@@ -60,55 +76,65 @@ class Microphone(Thread):
             sample_rate=int(self.device_info['defaultSampleRate']),
             num_frames=self.server.NUM_FRAMES,
         )
-        self.server.print_device_info(self)
-        self.start()
+
+        self.stream = None
 
     @override
     def run(self):
-        """ Continuously captures audio and sends it to the client. """
-        stream = self.server.audio_interface.open(
+        # Create audio stream instance
+        self.stream = self.server.audio_interface.open(
             format=self.config.audio_format,
             channels=self.config.channels,
             rate=self.config.sample_rate,
             input=True,
             frames_per_buffer=self.config.num_frames,
         )
-        print_("Microphone started")
-        try:
-            while True:
-                audio_data: bytes = stream.read(self.config.num_frames)
+        print_(f"{Color.GREEN}Microphone started{Color.RESET}")
+        self.server.print_device_info(self)
+
+        while self.stream is not None:
+            try:
+                audio_data: bytes = self.stream.read(self.config.num_frames)
                 self.server.send_data(audio_data)
-        except OSError:
-            pass
-        finally:
-            print_("Microphone stopped")
+            except (OSError, AttributeError):  # Includes TimeoutError
+                pass
+        print_(f"{Color.RED}Microphone stopped{Color.RESET}")
+
+    def stop(self):
+        """ Stop the thread and ensure it can be started again. """
+        if self.is_alive():
+            self.stream = None
+            self.join()
+            self.server.microphone = Microphone(self.server)  # Ready for the next start
 
 
 class SoundBridgeServer:
+    TIMEOUT = 0.5  # in seconds
     UDP_BUFFER_SIZE = 1024
     FORMAT = pyaudio.paInt16  # 16-bit format
     NUM_FRAMES = 32  # Number of frames per buffer
 
     def __init__(self, server_port: int, server_host: str = ''):
-        self.server_address = server_host, server_port
-        self.server_socket = self.init_socket()
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.server_socket.bind((server_host, server_port))
+        self.server_socket.settimeout(self.TIMEOUT)
         self.client_address = "0.0.0.0", server_port  # Set to a valid address when data is received
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
 
         # Detect device changes with a multiprocessing event
-        self.has_changed = Event()
-        self.device_monitor = Process(target=device_monitor, args=(self.has_changed,))
+        self.need_reload = Event()
+        self.device_monitor = Process(target=device_monitor, args=(self.need_reload,))
+        self.device_monitor.daemon = True
         self.device_monitor.start()
 
         # Wait for the process to fully initialize
-        self.has_changed.wait()
-        self.has_changed.clear()
+        self.need_reload.wait()
+        self.need_reload.clear()
 
         # Auto reload if the device changes
-        self.is_running: bool = True
-        Thread(target=self.reload).start()
+        Thread(target=self.reload_pyaudio, daemon=True).start()
 
         # Instantiate speaker and microphone
         self.speaker: Speaker = Speaker(self)
@@ -120,18 +146,9 @@ class SoundBridgeServer:
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             traceback.print_exception(exc_type, exc_value, traceback)
-        self.stop_device_threads()
 
-        # Stop reload helper thread
-        self.is_running = False
-        self.has_changed.set()
-
-        self.device_monitor.terminate()
-
-    def init_socket(self) -> socket.socket:
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        server_socket.bind(self.server_address)
-        return server_socket
+        self.speaker.stop()
+        self.microphone.stop()
 
     def send_data(self, data: bytes):
         """ Sends data to the client. """
@@ -142,24 +159,24 @@ class SoundBridgeServer:
         data, self.client_address = self.server_socket.recvfrom(self.UDP_BUFFER_SIZE)
         return data
 
-    def reload(self):
-        while self.has_changed.wait() and self.is_running:
-            self.stop_device_threads()
+    def reload_pyaudio(self):
+        while self.need_reload.wait():
+            is_speaker_on = self.speaker.is_alive()
+            is_microphone_on = self.microphone.is_alive()
+
+            # Completely stop device threads for safety
+            self.speaker.stop()
+            self.microphone.stop()
             self.audio_interface.terminate()
 
-            self.server_socket = self.init_socket()
             self.audio_interface = pyaudio.PyAudio()
-
             self.speaker = Speaker(self)
             self.microphone = Microphone(self)
 
-            self.has_changed.clear()
+            is_speaker_on and self.speaker.start()
+            is_microphone_on and self.microphone.start()
 
-    def stop_device_threads(self):
-        """ Stops threads by closing the socket. """
-        self.server_socket.close()
-        self.speaker.join()
-        self.microphone.join()
+            self.need_reload.clear()
 
     @staticmethod
     def print_device_info(device: Speaker | Microphone):
@@ -172,7 +189,7 @@ def device_monitor(signal: Event):
     """ The check must be performed in another process, as PyAudio must be terminated to detect device changes. """
     current_output_device, current_input_device = None, None
 
-    while time.sleep(0.5) or True:
+    while time.sleep(SoundBridgeServer.TIMEOUT) or True:
         audio_interface = pyaudio.PyAudio()
         output_device = audio_interface.get_default_output_device_info()
         input_device = audio_interface.get_default_input_device_info()
@@ -187,6 +204,8 @@ def device_monitor(signal: Event):
 
 def main():
     with SoundBridgeServer(server_port=2025) as server:
+        server.speaker.start()
+        server.microphone.start()
         input()
 
 
