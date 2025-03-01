@@ -71,7 +71,7 @@ class ControlChannelClient:
     def __init__(self, server_host: str, control_port: int):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
         while True:
-            print_(f"Attempting to connect to {server_host}:{control_port}")
+            print_(f"Attempting to connect to {server_host}:{control_port} over TCP")
             try:
                 self.client_socket.connect((server_host, control_port))
                 break
@@ -101,7 +101,7 @@ class ControlChannelClient:
         while True:
             self.client_socket.sendall(b'SPEAKER_CONFIG')
             data = self.receive_data()
-            if config := AudioConfig.from_bytes(data) is not None:
+            if (config := AudioConfig.from_bytes(data)) is not None:
                 print_("Received SPEAKER_CONFIG from server")
                 return config
 
@@ -109,7 +109,7 @@ class ControlChannelClient:
         while True:
             self.client_socket.sendall(b'MICROPHONE_CONFIG')
             data = self.receive_data()
-            if config := AudioConfig.from_bytes(data) is not None:
+            if (config := AudioConfig.from_bytes(data)) is not None:
                 print_("Received MICROPHONE_CONFIG from server")
                 return config
 
