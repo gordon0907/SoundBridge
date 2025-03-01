@@ -47,11 +47,11 @@ class ControlChannelServer:
                 case b'SPEAKER_CONFIG':
                     config = self.app_server.speaker.config
                     self.conn.sendall(config.to_bytes())
-                    print_("Sent SPEAKER_CONFIG to client")
+                    print_(f"{Color.CYAN}Sent SPEAKER_CONFIG to client{Color.RESET}")
                 case b'MICROPHONE_CONFIG':
                     config = self.app_server.microphone.config
                     self.conn.sendall(config.to_bytes())
-                    print_("Sent MICROPHONE_CONFIG to client")
+                    print_(f"{Color.CYAN}Sent MICROPHONE_CONFIG to client{Color.RESET}")
                 case b'TOGGLE_MICROPHONE':
                     if self.app_server.microphone.is_alive():
                         self.app_server.microphone.stop()
@@ -64,7 +64,7 @@ class ControlChannelServer:
             # Best effort, regardless of failure
             with suppress(Exception):
                 self.conn.sendall(b'RESET')
-                print_("Sent RESET to client")
+                print_(f"{Color.CYAN}Sent RESET to client{Color.RESET}")
 
         Thread(target=thread, daemon=True).start()
 
@@ -93,7 +93,7 @@ class ControlChannelClient:
         # Print message if it is not a command
         if b' ' in data:
             try:
-                print_(data.decode())
+                print_(f"{Color.MAGENTA}{data.decode()}{Color.RESET}")
             except UnicodeDecodeError:
                 pass
 
@@ -104,7 +104,7 @@ class ControlChannelClient:
             self.client_socket.sendall(b'SPEAKER_CONFIG')
             data = self.receive_data()
             if (config := AudioConfig.from_bytes(data)) is not None:
-                print_("Received SPEAKER_CONFIG from server")
+                print_(f"{Color.YELLOW}Received SPEAKER_CONFIG from server{Color.RESET}")
                 return config
 
     def get_microphone_config(self) -> AudioConfig:
@@ -112,16 +112,16 @@ class ControlChannelClient:
             self.client_socket.sendall(b'MICROPHONE_CONFIG')
             data = self.receive_data()
             if (config := AudioConfig.from_bytes(data)) is not None:
-                print_("Received MICROPHONE_CONFIG from server")
+                print_(f"{Color.YELLOW}Received MICROPHONE_CONFIG from server{Color.RESET}")
                 return config
 
     def listen_server(self):
         """ Blocks until a RESET signal is received from server. """
         while True:
             if self.receive_data() == b'RESET':
-                print_("Received RESET from server")
+                print_(f"{Color.YELLOW}Received RESET from server{Color.RESET}")
                 return
 
     def toggle_microphone(self):
         self.client_socket.sendall(b'TOGGLE_MICROPHONE')
-        print_("Sent TOGGLE_MICROPHONE to server")
+        print_(f"{Color.CYAN}Sent TOGGLE_MICROPHONE to server{Color.RESET}")
