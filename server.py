@@ -119,10 +119,8 @@ class SoundBridgeServer:
     NUM_FRAMES = 32  # Number of frames per buffer
 
     def __init__(self, server_port: int, control_port: int, server_host: str = ''):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.server_socket.bind((server_host, server_port))
-        self.server_socket.settimeout(self.TIMEOUT)
-        print_(f"UDP listener started on port {server_port}")
+        self.server_address = server_host, server_port
+        self.server_socket = self.init_socket()
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
         self.client_address = "192.168.0.1", server_port
@@ -160,6 +158,13 @@ class SoundBridgeServer:
         self.speaker.stop()
         self.microphone.stop()
 
+    def init_socket(self) -> socket.socket:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        server_socket.bind(self.server_address)
+        server_socket.settimeout(self.TIMEOUT)
+        print_(f"UDP listener started on port {self.server_address[1]}")
+        return server_socket
+
     def send_data(self, data: bytes):
         """ Sends data to the client. """
         return self.server_socket.sendto(data, self.client_address)
@@ -184,6 +189,11 @@ class SoundBridgeServer:
             self.microphone = Microphone(self)
 
             self.control.notify_client()
+
+            # Reset socket to clear internal buffer
+            self.server_socket.close()
+            self.server_socket = self.init_socket()
+
             is_speaker_on and self.speaker.start()
             is_microphone_on and self.microphone.start()
 
