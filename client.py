@@ -7,112 +7,133 @@ from typing import override
 import numpy as np
 import pyaudiowpatch as pyaudio
 
+from control_channel import ControlChannelClient
+from miscellaneous import *
 
-class SpeakerConfig:
-    SAMPLE_RATE = 48000  # 48 kHz
-    CHANNELS = 2  # Stereo
-    FORMAT = pyaudio.paInt16  # 16-bit format
-    NUM_FRAMES = 32  # Number of frames per buffer
-
-    # Derived Configuration
-    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-    # print(f"Speaker Chunk Size: {CHUNK_SIZE} Bytes")
-
-
-class MicConfig:
-    SAMPLE_RATE = 24000  # 24 kHz
-    CHANNELS = 1  # Mono
-    FORMAT = pyaudio.paInt16  # 16-bit format
-    NUM_FRAMES = 32  # Number of frames per buffer
-
-    # Derived Configuration
-    CHUNK_SIZE = NUM_FRAMES * CHANNELS * 2
-    # print(f"Microphone Chunk Size: {CHUNK_SIZE} Bytes\n")
+SERVER_HOST = "192.168.0.120"
+SERVER_PORT = 2024
+CONTROL_PORT = 2025
 
 
 class Speaker(Thread):
-    """ Captures system audio and streams it via UDP. """
+    """
+    Continuously captures system audio and transmits it to the server.
+    """
 
-    def __init__(self, client: SoundBridgeClient):
+    def __init__(self, client: SoundBridgeClient, config: AudioConfig):
         super().__init__()
         self.client: SoundBridgeClient = client
-        self.start()
+        self.config = config
+
+        # Get default loopback device info
+        self.device_info = self.client.audio_interface.get_default_wasapi_loopback()
+        self.stream = None
 
     @override
     def run(self):
-        """ Continuously captures and streams audio. """
-        helper_stream = self.client.audio_interface.open(
-            format=SpeakerConfig.FORMAT,
-            channels=SpeakerConfig.CHANNELS,
-            rate=SpeakerConfig.SAMPLE_RATE,
-            output=True,
-        )  # To keep source stream awake
-        dummy_audio_data = np.zeros((1, SpeakerConfig.CHANNELS)).tobytes()
         stream = self.client.audio_interface.open(
-            format=SpeakerConfig.FORMAT,
-            channels=SpeakerConfig.CHANNELS,
-            rate=SpeakerConfig.SAMPLE_RATE,
+            format=self.config.audio_format,
+            channels=self.config.channels,
+            rate=self.config.sample_rate,
+            output=True,
+        )  # Helper stream to keep the loopback stream awake
+        dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
+
+        self.stream = self.client.audio_interface.open(
+            format=self.config.audio_format,
+            channels=self.config.channels,
+            rate=self.config.sample_rate,
             input=True,
-            input_device_index=self.client.loopback_device['index'],
-            frames_per_buffer=SpeakerConfig.NUM_FRAMES,
+            input_device_index=self.device_info['index'],
+            frames_per_buffer=self.config.num_frames,
         )
-        print("Speaker started.")
-        try:
-            while True:
-                helper_stream.write(dummy_audio_data)
-                audio_data: bytes = stream.read(SpeakerConfig.NUM_FRAMES)
+        print_(f"{Color.GREEN}Speaker started{Color.RESET}")
+        self.client.print_device_info(self)
+
+        while self.stream is not None:
+            try:
+                stream.write(dummy_audio_data)
+                audio_data: bytes = self.stream.read(self.config.num_frames)
                 self.client.send_data(audio_data)
-        except OSError:
-            pass
-        finally:
-            print("Speaker stopped.")
+            except (OSError, AttributeError):  # Includes TimeoutError
+                pass
+        print_(f"{Color.RED}Speaker stopped{Color.RESET}")
+
+    def stop(self):
+        """ Stop the thread and ensure it can be started again. """
+        if self.is_alive():
+            self.stream = None
+            self.join()
 
 
 class Microphone(Thread):
-    """ Receives audio data via UDP and outputs it to virtual cable. """
+    """
+    Continuously receives audio from the server and plays it through the virtual cable.
+    """
 
-    def __init__(self, client: SoundBridgeClient):
+    def __init__(self, client: SoundBridgeClient, config: AudioConfig):
         super().__init__()
         self.client: SoundBridgeClient = client
-        self.start()
+        self.config = config
+
+        # Find Virtual Audio Cable (CABLE Input) and get its device info
+        for i in range(self.client.audio_interface.get_device_count()):
+            device_info = self.client.audio_interface.get_device_info_by_index(i)
+            if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 0:  # MME
+                self.device_info = device_info
+                break
+        else:
+            raise RuntimeError("No CABLE Input device found")
+
+        self.stream = None
 
     @override
     def run(self):
-        """ Continuously receives and outputs to virtual cable. """
-        stream = self.client.audio_interface.open(
-            format=MicConfig.FORMAT,
-            channels=MicConfig.CHANNELS,
-            rate=MicConfig.SAMPLE_RATE,
+        # Create audio stream instance
+        self.stream = self.client.audio_interface.open(
+            format=self.config.audio_format,
+            channels=self.config.channels,
+            rate=self.config.sample_rate,
             output=True,
-            output_device_index=self.client.virtual_cable_input['index'],
+            output_device_index=self.device_info['index'],
         )
-        print("Microphone started.")
-        try:
-            while True:
-                audio_data: bytes = self.client.receive_data(MicConfig.CHUNK_SIZE)
-                stream.write(audio_data)
-        except OSError:
-            pass
-        finally:
-            print("Microphone stopped.")
+        print_(f"{Color.GREEN}Microphone started{Color.RESET}")
+        self.client.print_device_info(self)
+
+        while self.stream is not None:
+            try:
+                audio_data: bytes = self.client.receive_data()
+                self.stream.write(audio_data)
+            except (OSError, AttributeError):  # Includes TimeoutError
+                pass
+        print_(f"{Color.RED}Microphone stopped{Color.RESET}")
+
+    def stop(self):
+        """ Stop the thread and ensure it can be started again. """
+        if self.is_alive():
+            self.stream = None
+            self.join()
 
 
 class SoundBridgeClient:
-    def __init__(self, server_port: int, server_host: str = "192.168.0.120"):
+    TIMEOUT = 0.5  # in seconds
+    UDP_BUFFER_SIZE = 1024
+
+    def __init__(self, server_host: str, server_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-
-        # Initialize the connection
-        self.send_data(b'')
+        self.client_socket.settimeout(self.TIMEOUT)
 
         # Initialize audio interface
-        self.audio_interface, self.loopback_device, self.virtual_cable_input = None, None, None
-        self.set_default_devices()
-        self.print_current_devices()
+        self.audio_interface = pyaudio.PyAudio()
 
         # Instantiate speaker and microphone
-        self.speaker: Speaker = Speaker(self)
-        self.microphone: Microphone = Microphone(self)
+        self.speaker: Speaker = Speaker(self, speaker_config)
+        self.microphone: Microphone = Microphone(self, microphone_config)
+
+        # Start speaker and microphone
+        self.speaker.start()
+        self.microphone.start()
 
     def __enter__(self):
         return self
@@ -120,46 +141,34 @@ class SoundBridgeClient:
     def __exit__(self, exc_type, exc_value, traceback):
         if exc_type:
             traceback.print_exception(exc_type, exc_value, traceback)
-        self.stop_device_threads()
+
+        self.speaker.stop()
+        self.microphone.stop()
 
     def send_data(self, data: bytes):
         """ Sends data to the server. """
         return self.client_socket.sendto(data, self.server_address)
 
-    def receive_data(self, size: int) -> bytes:
+    def receive_data(self) -> bytes:
         """ Receives data from the server. """
-        return self.client_socket.recvfrom(size)[0]
+        data = self.client_socket.recvfrom(self.UDP_BUFFER_SIZE)[0]
+        return data
 
-    def set_default_devices(self):
-        self.audio_interface = pyaudio.PyAudio()
-
-        # Get the loopback device as the speaker's source
-        self.loopback_device = self.audio_interface.get_default_wasapi_loopback()
-
-        # Find Virtual Audio Cable (CABLE Input) for the microphone
-        for i in range(self.audio_interface.get_device_count()):
-            device_info = self.audio_interface.get_device_info_by_index(i)
-            if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 0:  # MME
-                self.virtual_cable_input = device_info
-                break
-
-        if self.virtual_cable_input is None:
-            raise RuntimeError("No CABLE Input device found.")
-
-    def print_current_devices(self):
-        print(f"\nPlaying to: {self.virtual_cable_input['name']}")
-        print(f"Capturing from: {self.loopback_device['name']}")
-
-    def stop_device_threads(self):
-        """ Stops threads by closing the socket. """
-        self.client_socket.close()
-        self.speaker.join()
-        self.microphone.join()
+    @staticmethod
+    def print_device_info(device: Speaker | Microphone):
+        class_name = device.__class__.__name__
+        print_(f"<{class_name}> {device.device_info['name']} | "
+               f"{device.config.sample_rate} kHz {device.config.channels} ch")
 
 
 def main():
-    with SoundBridgeClient(server_port=2025) as client:
-        input("\n(Press Enter to stop)\n\n")
+    control_client = ControlChannelClient(SERVER_HOST, CONTROL_PORT)
+    while True:
+        speaker_config = control_client.get_speaker_config()
+        microphone_config = control_client.get_microphone_config()
+
+        with SoundBridgeClient(SERVER_HOST, SERVER_PORT, speaker_config, microphone_config):
+            control_client.listen_server()
 
 
 if __name__ == '__main__':
