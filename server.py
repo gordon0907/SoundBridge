@@ -29,7 +29,7 @@ class Speaker(Thread):
         self.config = AudioConfig(
             audio_format=self.server.FORMAT,
             channels=self.device_info['maxOutputChannels'],
-            sample_rate=int(self.device_info['defaultSampleRate']),
+            sample_rate=max(int(self.device_info['defaultSampleRate']), 48000),  # At least 48 kHz for client's WASAPI
             num_frames=self.server.NUM_FRAMES,
         )
 
@@ -125,7 +125,7 @@ class SoundBridgeServer:
         print_(f"UDP listener started on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
-        self.client_address = "0.0.0.0", server_port
+        self.client_address = "192.168.0.1", server_port
 
         # Initialize TCP control channel server
         self.control = ControlChannelServer(self, control_port, server_host)
