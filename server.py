@@ -113,7 +113,7 @@ class Microphone(Thread):
 
 
 class SoundBridgeServer:
-    TIMEOUT = 0.5  # in seconds
+    TIMEOUT = 0.1  # in seconds
     UDP_BUFFER_SIZE = 1024
     FORMAT = pyaudio.paInt16  # 16-bit format
     NUM_FRAMES = 32  # Number of frames per buffer
@@ -126,9 +126,6 @@ class SoundBridgeServer:
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
         self.client_address = "192.168.0.1", server_port
-
-        # Initialize TCP control channel server
-        self.control = ControlChannelServer(self, control_port, server_host)
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -149,6 +146,9 @@ class SoundBridgeServer:
         # Instantiate speaker and microphone
         self.speaker: Speaker = Speaker(self)
         self.microphone: Microphone = Microphone(self)
+
+        # Initialize TCP control channel server
+        self.control = ControlChannelServer(self, control_port, server_host)
 
     def __enter__(self):
         return self
@@ -200,7 +200,7 @@ def device_monitor(signal: Event):
     """ The check must be performed in another process, as PyAudio must be terminated to detect device changes. """
     current_output_device, current_input_device = None, None
 
-    while time.sleep(SoundBridgeServer.TIMEOUT) or True:
+    while time.sleep(2) or True:
         audio_interface = pyaudio.PyAudio()
         output_device = audio_interface.get_default_output_device_info()
         input_device = audio_interface.get_default_input_device_info()

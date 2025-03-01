@@ -18,7 +18,7 @@ class AudioConfig:
     def from_bytes(bytes_) -> AudioConfig | None:
         try:
             return pickle.loads(bytes_)
-        except pickle.UnpicklingError:
+        except (pickle.UnpicklingError, EOFError):
             return None
 
 

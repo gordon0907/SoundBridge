@@ -77,7 +77,7 @@ class ControlChannelClient:
             try:
                 self.client_socket.connect((server_host, control_port))
                 break
-            except TimeoutError:
+            except ConnectionRefusedError:
                 pass
         print_(f"Connected successfully")
         self.client_socket.settimeout(TCP_TIMEOUT)
