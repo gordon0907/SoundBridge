@@ -162,13 +162,19 @@ class SoundBridgeClient:
 
 
 def main():
-    control_client = ControlChannelClient(SERVER_HOST, CONTROL_PORT)
-    while True:
-        speaker_config = control_client.get_speaker_config()
-        microphone_config = control_client.get_microphone_config()
+    def thread():
+        while True:
+            speaker_config = control_client.get_speaker_config()
+            microphone_config = control_client.get_microphone_config()
 
-        with SoundBridgeClient(SERVER_HOST, SERVER_PORT, speaker_config, microphone_config):
-            control_client.listen_server()
+            with SoundBridgeClient(SERVER_HOST, SERVER_PORT, speaker_config, microphone_config):
+                control_client.listen_server()
+
+    control_client = ControlChannelClient(SERVER_HOST, CONTROL_PORT)
+    Thread(target=thread, daemon=True).start()
+
+    while input().lower() != 'q':
+        control_client.toggle_microphone()
 
 
 if __name__ == '__main__':
