@@ -29,9 +29,9 @@ class ControlChannelServer:
             # Maintain only one connection at a time
             if self.conn is not None:
                 self.conn.close()
-                print_(f"Closed connection with {self.addr[0]}:{self.addr[1]}")
+                print_(f"Closed TCP connection with {self.addr[0]}:{self.addr[1]}")
             self.conn, self.addr = conn, addr
-            print_(f"Connected with {self.addr[0]}:{self.addr[1]}")
+            print_(f"TCP Connected with {self.addr[0]}:{self.addr[1]}")
 
             if not self.request_handler_thread.is_alive():
                 self.request_handler_thread.start()
@@ -73,13 +73,13 @@ class ControlChannelClient:
     def __init__(self, server_host: str, control_port: int):
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
         while True:
-            print_(f"Attempting to connect to {server_host}:{control_port} over TCP")
+            print_(f"Attempting TCP connection to {server_host}:{control_port}")
             try:
                 self.client_socket.connect((server_host, control_port))
                 break
             except ConnectionRefusedError:
                 pass
-        print_(f"Connected successfully")
+        print_(f"TCP connection successful")
         self.client_socket.settimeout(TCP_TIMEOUT)
 
     def receive_data(self) -> bytes:

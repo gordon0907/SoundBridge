@@ -116,13 +116,12 @@ class Microphone(Thread):
 
 
 class SoundBridgeClient:
-    TIMEOUT = 0.5  # in seconds
     UDP_BUFFER_SIZE = 1024
 
     def __init__(self, server_host: str, server_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.client_socket.settimeout(self.TIMEOUT)
+        self.client_socket.setblocking(False)
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
