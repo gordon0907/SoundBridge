@@ -5,7 +5,7 @@ from threading import Thread
 from miscellaneous import *
 
 TCP_TIMEOUT = 0.5
-TCP_BUFFER_SIZE = 1024
+TCP_READ_SIZE = 1024
 
 
 class ControlChannelServer:
@@ -39,7 +39,7 @@ class ControlChannelServer:
     def request_handler(self):
         while True:
             try:
-                data: bytes = self.conn.recv(TCP_BUFFER_SIZE)
+                data: bytes = self.conn.recv(TCP_READ_SIZE)
             except OSError:  # Exception on connection change
                 continue
 
@@ -83,7 +83,7 @@ class ControlChannelClient:
     def receive_data(self) -> bytes:
         while True:
             with suppress(TimeoutError):
-                data = self.client_socket.recv(TCP_BUFFER_SIZE)
+                data = self.client_socket.recv(TCP_READ_SIZE)
                 break
 
         # Print message if it is not a command

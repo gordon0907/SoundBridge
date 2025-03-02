@@ -14,7 +14,7 @@ from miscellaneous import *
 SERVER_PORT = 2024
 CONTROL_PORT = 2025
 UDP_TIMEOUT = 1.  # in seconds
-UDP_BUFFER_SIZE = 1024
+UDP_READ_SIZE = 1024
 FORMAT = pyaudio.paInt16  # 16-bit format
 NUM_FRAMES = 32  # Number of frames per buffer
 
@@ -52,7 +52,10 @@ class Speaker(Thread):
         self.app.print_device_info(self)
 
         # Avoid audio delay after restart
-        self.app.clear_udp_buffer()
+        # self.app.clear_udp_buffer()
+
+        # Reduce socket internal buffer size to decrease audio delay
+        self.app.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
 
         while self.stream is not None:
             try:
@@ -168,7 +171,7 @@ class SoundBridgeServer:
 
     def receive_data(self) -> bytes:
         """ Receives data from the client and updates the client address. """
-        data, self.client_address = self.server_socket.recvfrom(UDP_BUFFER_SIZE)
+        data, self.client_address = self.server_socket.recvfrom(UDP_READ_SIZE)
         return data
 
     def clear_udp_buffer(self):

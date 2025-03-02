@@ -14,7 +14,7 @@ SERVER_HOST = "192.168.0.120"
 SERVER_PORT = 2024
 CONTROL_PORT = 2025
 UDP_TIMEOUT = 1.  # in seconds
-UDP_BUFFER_SIZE = 1024
+UDP_READ_SIZE = 1024
 
 
 class Speaker(Thread):
@@ -102,6 +102,9 @@ class Microphone(Thread):
         print_(f"{Color.GREEN}Microphone started{Color.RESET}")
         self.app.print_device_info(self)
 
+        # Reduce socket internal buffer size to decrease audio delay
+        self.app.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
+
         while self.stream is not None:
             try:
                 audio_data: bytes = self.app.receive_data()
@@ -152,7 +155,7 @@ class SoundBridgeClient:
 
     def receive_data(self) -> bytes:
         """ Receives data from the server. """
-        data = self.client_socket.recvfrom(UDP_BUFFER_SIZE)[0]
+        data = self.client_socket.recvfrom(UDP_READ_SIZE)[0]
         return data
 
     @staticmethod
