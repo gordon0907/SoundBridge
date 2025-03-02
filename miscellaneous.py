@@ -5,10 +5,10 @@ from datetime import datetime
 
 
 class AudioConfig:
-    def __init__(self, audio_format: int, channels: int, sample_rate: int, num_frames: int):
-        self.audio_format = audio_format
-        self.channels = channels
+    def __init__(self, sample_rate: int, channels: int, audio_format: int, num_frames: int):
         self.sample_rate = sample_rate
+        self.channels = channels
+        self.audio_format = audio_format
         self.num_frames = num_frames
 
     def to_bytes(self) -> bytes:

@@ -31,9 +31,9 @@ class Speaker(Thread):
         # Get default output device info
         self.device_info = self.app.audio_interface.get_default_output_device_info()
         self.config = AudioConfig(
-            audio_format=FORMAT,
-            channels=self.device_info['maxOutputChannels'],
             sample_rate=max(int(self.device_info['defaultSampleRate']), 48000),  # At least 48 kHz for client's WASAPI
+            channels=self.device_info['maxOutputChannels'],
+            audio_format=FORMAT,
             num_frames=NUM_FRAMES,
         )
 
@@ -43,9 +43,9 @@ class Speaker(Thread):
     def run(self):
         # Create audio stream instance
         self.stream = self.app.audio_interface.open(
-            format=self.config.audio_format,
-            channels=self.config.channels,
             rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
             output=True,
         )
         print_(f"{Color.GREEN}Speaker started{Color.RESET}")
@@ -82,9 +82,9 @@ class Microphone(Thread):
         # Get default input device info
         self.device_info = self.app.audio_interface.get_default_input_device_info()
         self.config = AudioConfig(
-            audio_format=FORMAT,
-            channels=self.device_info['maxInputChannels'],
             sample_rate=int(self.device_info['defaultSampleRate']),
+            channels=self.device_info['maxInputChannels'],
+            audio_format=FORMAT,
             num_frames=NUM_FRAMES,
         )
 
@@ -94,9 +94,9 @@ class Microphone(Thread):
     def run(self):
         # Create audio stream instance
         self.stream = self.app.audio_interface.open(
-            format=self.config.audio_format,
-            channels=self.config.channels,
             rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
             input=True,
             frames_per_buffer=self.config.num_frames,
         )

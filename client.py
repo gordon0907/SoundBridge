@@ -34,17 +34,17 @@ class Speaker(Thread):
     @override
     def run(self):
         stream = self.app.audio_interface.open(
-            format=self.config.audio_format,
-            channels=self.config.channels,
             rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
             output=True,
         )  # Helper stream to keep the loopback stream awake
         dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
 
         self.stream = self.app.audio_interface.open(
-            format=self.config.audio_format,
-            channels=self.config.channels,
             rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
             input=True,
             input_device_index=self.device_info['index'],
             frames_per_buffer=self.config.num_frames,
@@ -93,9 +93,9 @@ class Microphone(Thread):
     def run(self):
         # Create audio stream instance
         self.stream = self.app.audio_interface.open(
-            format=self.config.audio_format,
-            channels=self.config.channels,
             rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
             output=True,
             output_device_index=self.device_info['index'],
         )
