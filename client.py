@@ -13,25 +13,26 @@ from miscellaneous import *
 SERVER_HOST = "192.168.0.120"
 SERVER_PORT = 2024
 CONTROL_PORT = 2025
+UDP_BUFFER_SIZE = 1024
 
 
 class Speaker(Thread):
     """
-    Continuously captures system audio and transmits it to the server.
+    Continuously captures system audio and sends it to the server.
     """
 
-    def __init__(self, client: SoundBridgeClient, config: AudioConfig):
+    def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
-        self.client: SoundBridgeClient = client
+        self.app: SoundBridgeClient = app
         self.config = config
 
         # Get default loopback device info
-        self.device_info = self.client.audio_interface.get_default_wasapi_loopback()
+        self.device_info = self.app.audio_interface.get_default_wasapi_loopback()
         self.stream = None
 
     @override
     def run(self):
-        stream = self.client.audio_interface.open(
+        stream = self.app.audio_interface.open(
             format=self.config.audio_format,
             channels=self.config.channels,
             rate=self.config.sample_rate,
@@ -39,7 +40,7 @@ class Speaker(Thread):
         )  # Helper stream to keep the loopback stream awake
         dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
 
-        self.stream = self.client.audio_interface.open(
+        self.stream = self.app.audio_interface.open(
             format=self.config.audio_format,
             channels=self.config.channels,
             rate=self.config.sample_rate,
@@ -48,15 +49,15 @@ class Speaker(Thread):
             frames_per_buffer=self.config.num_frames,
         )
         print_(f"{Color.GREEN}Speaker started{Color.RESET}")
-        self.client.print_device_info(self)
+        self.app.print_device_info(self)
 
         while self.stream is not None:
             try:
                 stream.write(dummy_audio_data)
                 audio_data: bytes = self.stream.read(self.config.num_frames)
-                self.client.send_data(audio_data)
+                self.app.send_data(audio_data)
             except (OSError, AttributeError):  # Includes TimeoutError
-                pass
+                continue
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
     def stop(self):
@@ -71,14 +72,14 @@ class Microphone(Thread):
     Continuously receives audio from the server and plays it through the virtual cable.
     """
 
-    def __init__(self, client: SoundBridgeClient, config: AudioConfig):
+    def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
-        self.client: SoundBridgeClient = client
+        self.app: SoundBridgeClient = app
         self.config = config
 
         # Find Virtual Audio Cable (CABLE Input) and get its device info
-        for i in range(self.client.audio_interface.get_device_count()):
-            device_info = self.client.audio_interface.get_device_info_by_index(i)
+        for i in range(self.app.audio_interface.get_device_count()):
+            device_info = self.app.audio_interface.get_device_info_by_index(i)
             if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 0:  # MME
                 self.device_info = device_info
                 break
@@ -90,7 +91,7 @@ class Microphone(Thread):
     @override
     def run(self):
         # Create audio stream instance
-        self.stream = self.client.audio_interface.open(
+        self.stream = self.app.audio_interface.open(
             format=self.config.audio_format,
             channels=self.config.channels,
             rate=self.config.sample_rate,
@@ -98,14 +99,14 @@ class Microphone(Thread):
             output_device_index=self.device_info['index'],
         )
         print_(f"{Color.GREEN}Microphone started{Color.RESET}")
-        self.client.print_device_info(self)
+        self.app.print_device_info(self)
 
         while self.stream is not None:
             try:
-                audio_data: bytes = self.client.receive_data()
+                audio_data: bytes = self.app.receive_data()
                 self.stream.write(audio_data)
             except (OSError, AttributeError):  # Includes TimeoutError
-                pass
+                continue
         print_(f"{Color.RED}Microphone stopped{Color.RESET}")
 
     def stop(self):
@@ -116,8 +117,6 @@ class Microphone(Thread):
 
 
 class SoundBridgeClient:
-    UDP_BUFFER_SIZE = 1024
-
     def __init__(self, server_host: str, server_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
@@ -143,6 +142,8 @@ class SoundBridgeClient:
 
         self.speaker.stop()
         self.microphone.stop()
+        self.audio_interface.terminate()
+        self.client_socket.close()
 
     def send_data(self, data: bytes):
         """ Sends data to the server. """
@@ -150,14 +151,14 @@ class SoundBridgeClient:
 
     def receive_data(self) -> bytes:
         """ Receives data from the server. """
-        data = self.client_socket.recvfrom(self.UDP_BUFFER_SIZE)[0]
+        data = self.client_socket.recvfrom(UDP_BUFFER_SIZE)[0]
         return data
 
     @staticmethod
     def print_device_info(device: Speaker | Microphone):
         class_name = device.__class__.__name__
         print_(f"<{class_name}> {device.device_info['name']} | "
-               f"{device.config.sample_rate} kHz {device.config.channels} ch")
+               f"{device.config.sample_rate} Hz {device.config.channels} ch")
 
 
 def main():

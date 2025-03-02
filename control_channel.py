@@ -74,28 +74,22 @@ class ControlChannelClient:
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
         while True:
             print_(f"Attempting TCP connection to {server_host}:{control_port}")
-            try:
+            with suppress(ConnectionRefusedError):
                 self.client_socket.connect((server_host, control_port))
                 break
-            except ConnectionRefusedError:
-                pass
         print_(f"TCP connection successful")
         self.client_socket.settimeout(TCP_TIMEOUT)
 
     def receive_data(self) -> bytes:
         while True:
-            try:
+            with suppress(TimeoutError):
                 data = self.client_socket.recv(TCP_BUFFER_SIZE)
                 break
-            except TimeoutError:
-                pass
 
         # Print message if it is not a command
         if b' ' in data:
-            try:
+            with suppress(UnicodeDecodeError):
                 print_(f"{Color.MAGENTA}{data.decode()}{Color.RESET}")
-            except UnicodeDecodeError:
-                pass
 
         return data
 
