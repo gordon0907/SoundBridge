@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import socket
 import time
-from contextlib import suppress
 from multiprocessing import Event, Process
 from threading import Thread
 from typing import override
@@ -14,6 +13,7 @@ from miscellaneous import *
 
 SERVER_PORT = 2024
 CONTROL_PORT = 2025
+UDP_TIMEOUT = 1.  # in seconds
 UDP_BUFFER_SIZE = 1024
 FORMAT = pyaudio.paInt16  # 16-bit format
 NUM_FRAMES = 32  # Number of frames per buffer
@@ -123,7 +123,7 @@ class SoundBridgeServer:
     def __init__(self, server_port: int, control_port: int, server_host: str = ''):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
-        self.server_socket.setblocking(False)
+        self.server_socket.settimeout(UDP_TIMEOUT)
         print_(f"UDP listener started on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
@@ -172,9 +172,12 @@ class SoundBridgeServer:
         return data
 
     def clear_udp_buffer(self):
-        with suppress(BlockingIOError):
+        self.server_socket.setblocking(False)
+        try:
             while True:
                 self.receive_data()
+        except BlockingIOError:
+            self.server_socket.settimeout(UDP_TIMEOUT)
 
     def reload_pyaudio(self):
         while self.need_reload.wait():
@@ -207,7 +210,7 @@ def device_monitor(signal: Event):
     """ The check must be performed in another process, as PyAudio must be terminated to detect device changes. """
     current_output_device, current_input_device = None, None
 
-    while time.sleep(1) or True:
+    while time.sleep(1.) or True:
         audio_interface = pyaudio.PyAudio()
         output_device = audio_interface.get_default_output_device_info()['index']
         input_device = audio_interface.get_default_input_device_info()['index']
