@@ -69,8 +69,6 @@ it is!
   restart the client.
 - The server’s default input/output devices can be changed at any time (e.g., putting on or removing AirPods).
 - If audio glitches occur, restart the client. If issues persist, restart the server as well.
-- Before restarting the server, make sure the client is stopped. Otherwise, an **Address already in use** OS error may
-  occur.
 
 ## TODO
 
