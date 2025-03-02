@@ -4,7 +4,7 @@ from threading import Thread
 
 from miscellaneous import *
 
-TCP_TIMEOUT = 0.5
+TCP_TIMEOUT = 1.
 TCP_READ_SIZE = 1024
 
 
@@ -78,13 +78,14 @@ class ControlChannelClient:
                 self.client_socket.connect((server_host, control_port))
                 break
         print_(f"TCP connection successful")
-        self.client_socket.settimeout(TCP_TIMEOUT)
+        self.client_socket.settimeout(TCP_TIMEOUT)  # Avoid blocking if expected data is not received
 
     def receive_data(self) -> bytes:
-        while True:
-            with suppress(TimeoutError):
-                data = self.client_socket.recv(TCP_READ_SIZE)
-                break
+        """ Return received data or empty bytes if a timeout occurs. """
+        try:
+            data = self.client_socket.recv(TCP_READ_SIZE)
+        except TimeoutError:
+            return b''
 
         # Print message if it is not a command
         if b' ' in data:

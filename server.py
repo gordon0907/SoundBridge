@@ -47,6 +47,7 @@ class Speaker(Thread):
             channels=self.config.channels,
             format=self.config.audio_format,
             output=True,
+            frames_per_buffer=self.config.num_frames,
         )
         print_(f"{Color.GREEN}Speaker started{Color.RESET}")
         self.app.print_device_info(self)
@@ -60,7 +61,7 @@ class Speaker(Thread):
         while self.stream is not None:
             try:
                 audio_data: bytes = self.app.receive_data()
-                self.stream.write(audio_data)
+                self.stream.write(audio_data, exception_on_underflow=False)
             except (OSError, AttributeError):  # Includes TimeoutError
                 continue
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
@@ -108,7 +109,7 @@ class Microphone(Thread):
 
         while self.stream is not None:
             try:
-                audio_data: bytes = self.stream.read(self.config.num_frames)
+                audio_data: bytes = self.stream.read(self.config.num_frames, exception_on_overflow=False)
                 self.app.send_data(audio_data)
             except (OSError, AttributeError):  # Includes TimeoutError
                 continue
