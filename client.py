@@ -4,7 +4,6 @@ import socket
 from threading import Thread
 from typing import override
 
-import numpy as np
 import pyaudiowpatch as pyaudio
 
 from control_channel import ControlChannelClient
@@ -30,14 +29,7 @@ class Speaker(Thread):
 
     @override
     def run(self):
-        stream = self.app.audio_interface.open(
-            rate=self.config.sample_rate,
-            channels=self.config.channels,
-            format=self.config.audio_format,
-            output=True,
-        )  # Helper stream to keep the loopback stream awake
-        dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
-
+        # Create audio stream instance
         self.stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
@@ -51,7 +43,7 @@ class Speaker(Thread):
 
         while self.stream is not None:
             try:
-                stream.write(dummy_audio_data, exception_on_underflow=False)
+                # The following line blocks indefinitely if no audio is playing
                 audio_data: bytes = self.stream.read(self.config.num_frames, exception_on_overflow=False)
                 self.app.send_data(audio_data)
             except (OSError, AttributeError):  # Includes TimeoutError
