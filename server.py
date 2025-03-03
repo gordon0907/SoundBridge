@@ -34,12 +34,12 @@ class Speaker(Thread):
             num_frames=NUM_FRAMES,
         )
 
-        self.stream = None
+        self.run_flag: bool = True
 
     @override
     def run(self):
         # Create audio stream instance
-        self.stream = self.app.audio_interface.open(
+        stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
             format=self.config.audio_format,
@@ -52,18 +52,22 @@ class Speaker(Thread):
         # Reduce socket internal buffer size to decrease audio delay
         self.app.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
 
-        while self.stream is not None:
+        while self.run_flag:
             try:
                 audio_data: bytes = self.app.receive_data(self.config.packet_size)
-                self.stream.write(audio_data, exception_on_underflow=False)
-            except (OSError, AttributeError):  # Includes TimeoutError
+            except TimeoutError:
                 continue
+            stream.write(audio_data, exception_on_underflow=False)
+
+        # Clean up
+        stream.stop_stream()
+        stream.close()
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
     def stop(self):
         """Stop the thread and ensure it can be started again."""
         if self.is_alive():
-            self.stream = None
+            self.run_flag = False
             self.join()
             self.app.speaker = Speaker(self.app)  # Ready for the next start
 
@@ -84,12 +88,12 @@ class Microphone(Thread):
             num_frames=NUM_FRAMES,
         )
 
-        self.stream = None
+        self.run_flag: bool = True
 
     @override
     def run(self):
         # Create audio stream instance
-        self.stream = self.app.audio_interface.open(
+        stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
             format=self.config.audio_format,
@@ -99,18 +103,19 @@ class Microphone(Thread):
         print_(f"{Color.GREEN}Microphone started{Color.RESET}")
         self.app.print_device_info(self)
 
-        while self.stream is not None:
-            try:
-                audio_data: bytes = self.stream.read(self.config.num_frames, exception_on_overflow=False)
-                self.app.send_data(audio_data)
-            except (OSError, AttributeError):  # Includes TimeoutError
-                continue
+        while self.run_flag:
+            audio_data: bytes = stream.read(self.config.num_frames, exception_on_overflow=False)
+            self.app.send_data(audio_data)
+
+        # Clean up
+        stream.stop_stream()
+        stream.close()
         print_(f"{Color.RED}Microphone stopped{Color.RESET}")
 
     def stop(self):
         """Stop the thread and ensure it can be started again."""
         if self.is_alive():
-            self.stream = None
+            self.run_flag = False
             self.join()
             self.app.microphone = Microphone(self.app)  # Ready for the next start
 
@@ -157,6 +162,8 @@ class SoundBridgeServer:
 
         self.speaker.stop()
         self.microphone.stop()
+        self.audio_interface.terminate()
+        self.server_socket.close()
 
     def send_data(self, data: bytes):
         """Sends data to the client."""

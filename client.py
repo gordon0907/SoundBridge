@@ -4,6 +4,7 @@ import socket
 from threading import Thread
 from typing import override
 
+import numpy as np
 import pyaudiowpatch as pyaudio
 
 from control_channel import ControlChannelClient
@@ -25,12 +26,22 @@ class Speaker(Thread):
 
         # Get default loopback device info
         self.device_info = self.app.audio_interface.get_default_wasapi_loopback()
-        self.stream = None
+        self.run_flag: bool = True
 
     @override
     def run(self):
+        # Helper stream to keep the loopback stream non-blocking
+        output_stream = self.app.audio_interface.open(
+            rate=self.config.sample_rate,
+            channels=self.config.channels,
+            format=self.config.audio_format,
+            output=True,
+        )
+        # The length (# of cols) may need to be increased if NUM_FRAMES > 32
+        dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
+
         # Create audio stream instance
-        self.stream = self.app.audio_interface.open(
+        stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
             format=self.config.audio_format,
@@ -41,19 +52,22 @@ class Speaker(Thread):
         print_(f"{Color.GREEN}Speaker started{Color.RESET}")
         self.app.print_device_info(self)
 
-        while self.stream is not None:
-            try:
-                # The following line blocks indefinitely if no audio is playing
-                audio_data: bytes = self.stream.read(self.config.num_frames, exception_on_overflow=False)
-                self.app.send_data(audio_data)
-            except (OSError, AttributeError):  # Includes TimeoutError
-                continue
+        while self.run_flag:
+            output_stream.write(dummy_audio_data, exception_on_underflow=False)
+            audio_data: bytes = stream.read(self.config.num_frames, exception_on_overflow=False)
+            self.app.send_data(audio_data)
+
+        # Clean up
+        output_stream.stop_stream()
+        output_stream.close()
+        stream.stop_stream()
+        stream.close()
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
     def stop(self):
         """Stop the thread and ensure it can be started again."""
         if self.is_alive():
-            self.stream = None
+            self.run_flag = False
             self.join()
 
 
@@ -74,12 +88,12 @@ class Microphone(Thread):
         else:
             raise RuntimeError("No CABLE Input device found")
 
-        self.stream = None
+        self.run_flag: bool = True
 
     @override
     def run(self):
         # Create audio stream instance
-        self.stream = self.app.audio_interface.open(
+        stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
             format=self.config.audio_format,
@@ -93,18 +107,22 @@ class Microphone(Thread):
         # Reduce socket internal buffer size to decrease audio delay
         self.app.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
 
-        while self.stream is not None:
+        while self.run_flag:
             try:
                 audio_data: bytes = self.app.receive_data(self.config.packet_size)
-                self.stream.write(audio_data, exception_on_underflow=False)
-            except (OSError, AttributeError):  # Includes TimeoutError
+            except TimeoutError:
                 continue
+            stream.write(audio_data, exception_on_underflow=False)
+
+        # Clean up
+        stream.stop_stream()
+        stream.close()
         print_(f"{Color.RED}Microphone stopped{Color.RESET}")
 
     def stop(self):
         """Stop the thread and ensure it can be started again."""
         if self.is_alive():
-            self.stream = None
+            self.run_flag = False
             self.join()
 
 
