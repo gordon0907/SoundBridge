@@ -17,9 +17,7 @@ UDP_TIMEOUT: float = 1.  # in seconds
 
 
 class Speaker(Thread):
-    """
-    Continuously captures system audio and sends it to the server.
-    """
+    """Continuously captures system audio and sends it to the server."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
@@ -61,16 +59,14 @@ class Speaker(Thread):
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
     def stop(self):
-        """ Stop the thread and ensure it can be started again. """
+        """Stop the thread and ensure it can be started again."""
         if self.is_alive():
             self.stream = None
             self.join()
 
 
 class Microphone(Thread):
-    """
-    Continuously receives audio from the server and plays it through the virtual cable.
-    """
+    """Continuously receives audio from the server and plays it through the virtual cable."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
@@ -114,7 +110,7 @@ class Microphone(Thread):
         print_(f"{Color.RED}Microphone stopped{Color.RESET}")
 
     def stop(self):
-        """ Stop the thread and ensure it can be started again. """
+        """Stop the thread and ensure it can be started again."""
         if self.is_alive():
             self.stream = None
             self.join()
@@ -150,11 +146,11 @@ class SoundBridgeClient:
         self.client_socket.close()
 
     def send_data(self, data: bytes):
-        """ Sends data to the server. """
+        """Sends data to the server."""
         return self.client_socket.sendto(data, self.server_address)
 
     def receive_data(self, max_bytes: int) -> bytes:
-        """ Receives data from the server. """
+        """Receives data from the server."""
         data, _ = self.client_socket.recvfrom(max_bytes)
         return data
 

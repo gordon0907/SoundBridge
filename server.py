@@ -19,9 +19,7 @@ NUM_FRAMES: int = 32  # Number of frames per buffer
 
 
 class Speaker(Thread):
-    """
-    Continuously receives audio data from the client and plays it on the system's default output device.
-    """
+    """Continuously receives audio data from the client and plays it on the system's default output device."""
 
     def __init__(self, app: SoundBridgeServer):
         super().__init__()
@@ -51,9 +49,6 @@ class Speaker(Thread):
         print_(f"{Color.GREEN}Speaker started{Color.RESET}")
         self.app.print_device_info(self)
 
-        # Avoid audio delay after restart
-        # self.app.clear_udp_buffer()
-
         # Reduce socket internal buffer size to decrease audio delay
         self.app.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
 
@@ -66,7 +61,7 @@ class Speaker(Thread):
         print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
     def stop(self):
-        """ Stop the thread and ensure it can be started again. """
+        """Stop the thread and ensure it can be started again."""
         if self.is_alive():
             self.stream = None
             self.join()
@@ -74,9 +69,7 @@ class Speaker(Thread):
 
 
 class Microphone(Thread):
-    """
-    Continuously captures audio from the system's input device and sends it to the client.
-    """
+    """Continuously captures audio from the system's input device and sends it to the client."""
 
     def __init__(self, app: SoundBridgeServer):
         super().__init__()
@@ -115,7 +108,7 @@ class Microphone(Thread):
         print_(f"{Color.RED}Microphone stopped{Color.RESET}")
 
     def stop(self):
-        """ Stop the thread and ensure it can be started again. """
+        """Stop the thread and ensure it can be started again."""
         if self.is_alive():
             self.stream = None
             self.join()
@@ -166,21 +159,13 @@ class SoundBridgeServer:
         self.microphone.stop()
 
     def send_data(self, data: bytes):
-        """ Sends data to the client. """
+        """Sends data to the client."""
         return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self, max_bytes: int) -> bytes:
-        """ Receives data from the client and updates the client address. """
+        """Receives data from the client and updates the client address."""
         data, self.client_address = self.server_socket.recvfrom(max_bytes)
         return data
-
-    def clear_udp_buffer(self):
-        self.server_socket.setblocking(False)
-        try:
-            while True:
-                self.receive_data()
-        except BlockingIOError:
-            self.server_socket.settimeout(UDP_TIMEOUT)
 
     def reload_pyaudio(self):
         while self.need_reload.wait():
@@ -210,7 +195,7 @@ class SoundBridgeServer:
 
 
 def device_monitor(signal: Event):
-    """ The check must be performed in another process, as PyAudio must be terminated to detect device changes. """
+    """The check must be performed in another process, as PyAudio must be terminated to detect device changes."""
     current_output_device, current_input_device = None, None
 
     while time.sleep(1.) or True:

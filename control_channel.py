@@ -81,7 +81,7 @@ class ControlChannelClient:
         self.client_socket.settimeout(TCP_TIMEOUT)  # Avoid blocking if expected data is not received
 
     def receive_data(self) -> bytes:
-        """ Return received data or empty bytes if a timeout occurs. """
+        """Return received data or empty bytes if a timeout occurs."""
         try:
             data = self.client_socket.recv(TCP_READ_SIZE)
         except TimeoutError:
@@ -111,7 +111,7 @@ class ControlChannelClient:
                 return config
 
     def listen_server(self):
-        """ Blocks until a RESET signal is received from server. """
+        """Blocks until a RESET signal is received from server."""
         while True:
             if self.receive_data() == b'RESET':
                 print_(f"{Color.YELLOW}Received RESET from server{Color.RESET}")
