@@ -43,7 +43,7 @@ it is!
 
 #### Client (Windows)
 
-1. Install `VB-Cable` and set ``VB-Cable Output`` as the default **microphone**.
+1. Install `VB-Cable` and set `VB-Cable Output` as the default **microphone**.
     - **Do not** set `VB-Cable Input` as the default speaker.
     - Instead, set another input device that supports WASAPI loopback.
 2. Install Python dependencies:
@@ -70,9 +70,16 @@ it is!
 - The server’s default input/output devices can be changed at any time (e.g., putting on or removing AirPods).
 - If audio glitches occur, restart the client. If issues persist, restart the server as well.
 
+## Known Issue
+
+- **Audio Delay After Toggling Microphone**: After toggling the microphone on the client, the server's audio output may
+  experience a delay. This is likely due to `pyaudio` stream management, where stopping a stream interferes with
+  another. The current workaround is to restart the client.
+
 ## TODO
 
 - Implement a GUI for the client.
 
 ---
+
 Feel free to contribute or suggest improvements!
