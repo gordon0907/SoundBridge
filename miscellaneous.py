@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import pickle
+from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
 
 from pyaudio import get_sample_size
 
-BUFFER_TIME = 0.5  # in seconds
+BUFFER_TIME: float = 0.5  # in seconds
 
 
+@dataclass(frozen=True)
 class AudioConfig:
-    def __init__(self, sample_rate: int, channels: int, audio_format: int, num_frames: int):
-        self.sample_rate = sample_rate
-        self.channels = channels
-        self.audio_format = audio_format
-        self.num_frames = num_frames
+    sample_rate: int
+    channels: int
+    audio_format: int
+    num_frames: int
 
-    @property
+    @cached_property
     def packet_size(self) -> int:
         return self.num_frames * self.channels * get_sample_size(self.audio_format)
 

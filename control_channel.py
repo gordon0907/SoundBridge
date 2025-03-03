@@ -4,8 +4,8 @@ from threading import Thread
 
 from miscellaneous import *
 
-TCP_TIMEOUT = 1.
-TCP_READ_SIZE = 1024
+TCP_TIMEOUT: float = 1.
+TCP_READ_SIZE: int = 1024
 
 
 class ControlChannelServer:

@@ -10,11 +10,10 @@ import pyaudiowpatch as pyaudio
 from control_channel import ControlChannelClient
 from miscellaneous import *
 
-SERVER_HOST = "192.168.0.120"
-SERVER_PORT = 2024
-CONTROL_PORT = 2025
-UDP_TIMEOUT = 1.  # in seconds
-UDP_READ_SIZE = 1024
+SERVER_HOST: str = "192.168.0.120"
+SERVER_PORT: int = 2024
+CONTROL_PORT: int = 2025
+UDP_TIMEOUT: float = 1.  # in seconds
 
 
 class Speaker(Thread):
@@ -108,7 +107,7 @@ class Microphone(Thread):
 
         while self.stream is not None:
             try:
-                audio_data: bytes = self.app.receive_data()
+                audio_data: bytes = self.app.receive_data(self.config.packet_size)
                 self.stream.write(audio_data, exception_on_underflow=False)
             except (OSError, AttributeError):  # Includes TimeoutError
                 continue
@@ -154,9 +153,9 @@ class SoundBridgeClient:
         """ Sends data to the server. """
         return self.client_socket.sendto(data, self.server_address)
 
-    def receive_data(self) -> bytes:
+    def receive_data(self, max_bytes: int) -> bytes:
         """ Receives data from the server. """
-        data = self.client_socket.recvfrom(UDP_READ_SIZE)[0]
+        data, _ = self.client_socket.recvfrom(max_bytes)
         return data
 
     @staticmethod

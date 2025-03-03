@@ -11,12 +11,11 @@ import pyaudio
 from control_channel import ControlChannelServer
 from miscellaneous import *
 
-SERVER_PORT = 2024
-CONTROL_PORT = 2025
-UDP_TIMEOUT = 1.  # in seconds
-UDP_READ_SIZE = 1024
-FORMAT = pyaudio.paInt16  # 16-bit format
-NUM_FRAMES = 32  # Number of frames per buffer
+SERVER_PORT: int = 2024
+CONTROL_PORT: int = 2025
+UDP_TIMEOUT: float = 1.  # in seconds
+FORMAT: int = pyaudio.paInt16  # 16-bit format
+NUM_FRAMES: int = 32  # Number of frames per buffer
 
 
 class Speaker(Thread):
@@ -60,7 +59,7 @@ class Speaker(Thread):
 
         while self.stream is not None:
             try:
-                audio_data: bytes = self.app.receive_data()
+                audio_data: bytes = self.app.receive_data(self.config.packet_size)
                 self.stream.write(audio_data, exception_on_underflow=False)
             except (OSError, AttributeError):  # Includes TimeoutError
                 continue
@@ -170,9 +169,9 @@ class SoundBridgeServer:
         """ Sends data to the client. """
         return self.server_socket.sendto(data, self.client_address)
 
-    def receive_data(self) -> bytes:
+    def receive_data(self, max_bytes: int) -> bytes:
         """ Receives data from the client and updates the client address. """
-        data, self.client_address = self.server_socket.recvfrom(UDP_READ_SIZE)
+        data, self.client_address = self.server_socket.recvfrom(max_bytes)
         return data
 
     def clear_udp_buffer(self):
