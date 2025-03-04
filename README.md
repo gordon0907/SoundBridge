@@ -72,9 +72,10 @@ it is!
 
 ## Known Issue
 
-- **Audio Delay After Toggling Microphone**: After toggling the microphone on the client, the server's audio output may
-  experience a delay. This is likely due to `pyaudio` stream management, where stopping a stream interferes with
-  another. The current workaround is to restart the client.
+- **Audio Delay After Toggling AirPods Microphone**: When using AirPods, toggling the microphone in the client may cause
+  a delay in the server's audio output. This issue likely occurs due to a shift in the AirPods' output sample rate when
+  the microphone is activated, dropping from 48 kHz to 24 kHz. The current workaround is to restart the client to
+  resynchronize the audio stream.
 
 ## TODO
 
