@@ -167,7 +167,10 @@ class SoundBridgeServer:
 
     def send_data(self, data: bytes):
         """Sends data to the client."""
-        return self.server_socket.sendto(data, self.client_address)
+        try:
+            return self.server_socket.sendto(data, self.client_address)
+        except OSError:
+            return -1
 
     def receive_data(self, max_bytes: int) -> bytes:
         """Receives data from the client and updates the client address."""
