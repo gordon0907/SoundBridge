@@ -74,8 +74,8 @@ it is!
 
 - **Audio Delay After Toggling AirPods Microphone**: When using AirPods, toggling the microphone in the client may cause
   a delay in the server's audio output. This issue likely occurs due to a shift in the AirPods' output sample rate when
-  the microphone is activated, dropping from 48 kHz to 24 kHz. The current workaround is to restart the client to
-  resynchronize the audio stream.
+  the microphone is activated, dropping from 48 kHz to 24 kHz. The current workaround is to restart the client to reset
+  the audio stream delay.
 
 ## TODO
 
