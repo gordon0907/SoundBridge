@@ -7,7 +7,7 @@ from functools import cached_property
 
 from pyaudio import get_sample_size
 
-BUFFER_TIME: float = 0.5  # in seconds
+BUFFER_TIME: float = 0.2  # in seconds
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,11 @@ class AudioConfig:
 
     @property
     def udp_buffer_size(self) -> int:
-        return int(BUFFER_TIME * self.sample_rate * self.channels * get_sample_size(self.audio_format))
+        num_bytes = int(BUFFER_TIME * self.sample_rate * self.channels * get_sample_size(self.audio_format))
+        num_packets = num_bytes // self.packet_size
+        # Calculate required buffer size for packets based on macOS experimental testing
+        # Offset varies with `packet_size`: slot_size = 448, offset = -428, min_overhead = 32
+        return max(448 * num_packets - 428, 32 + self.packet_size)
 
     def to_bytes(self) -> bytes:
         return pickle.dumps(self)
