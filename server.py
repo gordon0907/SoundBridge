@@ -69,7 +69,7 @@ class Speaker(Thread):
         if self.is_alive():
             self.run_flag = False
             self.join()
-            self.app.speaker = Speaker(self.app)  # Ready for the next start
+        self.app.speaker = Speaker(self.app)  # Ready for the next start
 
 
 class Microphone(Thread):
@@ -117,7 +117,7 @@ class Microphone(Thread):
         if self.is_alive():
             self.run_flag = False
             self.join()
-            self.app.microphone = Microphone(self.app)  # Ready for the next start
+        self.app.microphone = Microphone(self.app)  # Ready for the next start
 
 
 class SoundBridgeServer:
@@ -167,10 +167,7 @@ class SoundBridgeServer:
 
     def send_data(self, data: bytes):
         """Sends data to the client."""
-        try:
-            return self.server_socket.sendto(data, self.client_address)
-        except OSError:
-            return -1
+        return self.server_socket.sendto(data, self.client_address)
 
     def receive_data(self, max_bytes: int) -> bytes:
         """Receives data from the client and updates the client address."""
