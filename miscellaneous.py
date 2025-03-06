@@ -22,6 +22,10 @@ class AudioConfig:
         return self.num_frames * self.channels * get_sample_size(self.audio_format)
 
     @property
+    def packet_duration(self) -> float:
+        return self.num_frames / self.sample_rate  # in seconds
+
+    @property
     def udp_buffer_size(self) -> int:
         num_bytes = int(BUFFER_TIME * self.sample_rate * self.channels * get_sample_size(self.audio_format))
         num_packets = num_bytes // self.packet_size
