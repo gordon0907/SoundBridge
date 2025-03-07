@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import socket
+from functools import cache
 from threading import Thread
 from typing import override
 
-import numpy as np
 import pyaudiowpatch as pyaudio
 
 from control_channel import ControlChannelClient
@@ -37,8 +37,8 @@ class Speaker(Thread):
             format=self.config.audio_format,
             output=True,
         )
-        # The length (# of cols) may need to be increased if NUM_FRAMES > 32
-        dummy_audio_data = np.zeros((1, self.config.channels)).tobytes()
+        # Dummy num_frames may need to be increased if capturing NUM_FRAMES > 32
+        dummy_audio_data = self.app.generate_dummy_audio(1, self.config.channels, self.config.audio_format)
 
         # Create audio stream instance
         stream = self.app.audio_interface.open(
@@ -170,6 +170,11 @@ class SoundBridgeClient:
         print_(f"<{class_name}> {device.device_info['name']} | "
                f"{device.config.sample_rate} Hz {device.config.channels} ch")
 
+    @staticmethod
+    @cache
+    def generate_dummy_audio(num_frames: int, channels: int, audio_format: int) -> bytes:
+        return b'\x00' * num_frames * channels * pyaudio.get_sample_size(audio_format)
+
 
 def main():
     def thread():
@@ -178,7 +183,9 @@ def main():
             microphone_config = control_client.get_microphone_config()
 
             with SoundBridgeClient(SERVER_HOST, SERVER_PORT, speaker_config, microphone_config):
-                control_client.listen_server()
+                control_client.wait_for_stop()
+
+            control_client.wait_for_start()
 
     control_client = ControlChannelClient(SERVER_HOST, CONTROL_PORT)
     Thread(target=thread, daemon=True).start()

@@ -176,6 +176,10 @@ class SoundBridgeServer:
 
     def reload_pyaudio(self):
         while self.need_reload.wait():
+            # Stop the client before reloading
+            self.control.stop_client()
+
+            # Store device statuses
             is_speaker_on = self.speaker.is_alive()
             is_microphone_on = self.microphone.is_alive()
 
@@ -184,13 +188,17 @@ class SoundBridgeServer:
             self.microphone.stop()
             self.audio_interface.terminate()
 
+            # Reinitialize audio interface and device instances
             self.audio_interface = pyaudio.PyAudio()
             self.speaker = Speaker(self)
             self.microphone = Microphone(self)
 
-            self.control.notify_client()
+            # Restart devices if they were previously running
             is_speaker_on and self.speaker.start()
             is_microphone_on and self.microphone.start()
+
+            # Restart the client
+            self.control.start_client()
 
             self.need_reload.clear()
 

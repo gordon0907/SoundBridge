@@ -59,14 +59,21 @@ class ControlChannelServer:
                         self.app_server.microphone.start()
                     self.conn.sendall(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF')
 
-    def notify_client(self):
+    def send_client(self, message: bytes):
         def thread():
             # Best effort, regardless of failure
             with suppress(Exception):
-                self.conn.sendall(b'RESET')
-                print_(f"{Color.CYAN}Sent RESET to client{Color.RESET}")
+                self.conn.sendall(message)
+                print_(f"{Color.CYAN}Sent {message_str} to client{Color.RESET}")
 
+        message_str = message.decode()
         Thread(target=thread, daemon=True).start()
+
+    def stop_client(self):
+        self.send_client(b'STOP')
+
+    def start_client(self):
+        self.send_client(b'START')
 
 
 class ControlChannelClient:
@@ -110,13 +117,20 @@ class ControlChannelClient:
                 print_(f"{Color.YELLOW}Received MICROPHONE_CONFIG from server{Color.RESET}")
                 return config
 
-    def listen_server(self):
-        """Blocks until a RESET signal is received from server."""
-        while True:
-            if self.receive_data() == b'RESET':
-                print_(f"{Color.YELLOW}Received RESET from server{Color.RESET}")
-                return
-
     def toggle_microphone(self):
         self.client_socket.sendall(b'TOGGLE_MICROPHONE')
         print_(f"{Color.CYAN}Sent TOGGLE_MICROPHONE to server{Color.RESET}")
+
+    def wait_for_message(self, message: bytes):
+        """Blocks until the specified message is received from server."""
+        message_str = message.decode()
+        while True:
+            if self.receive_data() == message:
+                print_(f"{Color.YELLOW}Received {message_str} from server{Color.RESET}")
+                return
+
+    def wait_for_stop(self):
+        self.wait_for_message(b'STOP')
+
+    def wait_for_start(self):
+        self.wait_for_message(b'START')
