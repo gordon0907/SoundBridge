@@ -168,7 +168,7 @@ class SoundBridgeClient:
     def print_device_info(device: Speaker | Microphone):
         class_name = device.__class__.__name__
         print_(f"<{class_name}> {device.device_info['name']} | "
-               f"{device.config.sample_rate} Hz {device.config.channels} ch")
+               f"{format_hz_to_khz(device.config.sample_rate)} kHz, {device.config.channels} ch")
 
     @staticmethod
     @cache

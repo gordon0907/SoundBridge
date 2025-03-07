@@ -56,5 +56,11 @@ class Color:
     WHITE = '\033[37m'
 
 
+def format_hz_to_khz(hz: int | float) -> str:
+    """Convert frequency in Hz to a smartly formatted kHz string."""
+    khz: float = hz / 1000
+    return f'{khz:.3f}'.rstrip('0').rstrip('.')  # Remove unnecessary trailing zeros and decimal point
+
+
 def print_(*args, **kwargs):
     return print(f"[{datetime.now().isoformat()}]", *args, **kwargs)

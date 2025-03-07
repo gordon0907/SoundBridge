@@ -206,7 +206,7 @@ class SoundBridgeServer:
     def print_device_info(device: Speaker | Microphone):
         class_name = device.__class__.__name__
         print_(f"<{class_name}> {device.device_info['name']} | "
-               f"{device.config.sample_rate} Hz {device.config.channels} ch")
+               f"{format_hz_to_khz(device.config.sample_rate)} kHz, {device.config.channels} ch")
 
 
 def device_monitor(signal: Event):
@@ -215,8 +215,8 @@ def device_monitor(signal: Event):
     def print_change(icon, old_device, new_device, channels_key):
         if old_device is not None:
             print_(f"{icon} "
-                   f"{old_device['name']} ({old_device['defaultSampleRate']:.0f} Hz, {old_device[channels_key]} ch) ➔ "
-                   f"{new_device['name']} ({new_device['defaultSampleRate']:.0f} Hz, {new_device[channels_key]} ch)")
+                   f"{old_device['name']} ({format_hz_to_khz(old_device['defaultSampleRate'])} kHz, {old_device[channels_key]} ch) ➔ "
+                   f"{new_device['name']} ({format_hz_to_khz(new_device['defaultSampleRate'])} kHz, {new_device[channels_key]} ch)")
 
     current_output_device, current_input_device = None, None
 
