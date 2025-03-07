@@ -215,7 +215,7 @@ def device_monitor(signal: Event):
     def print_change(icon, old_device, new_device, channels_key):
         if old_device is not None:
             print_(f"{icon} "
-                   f"{old_device['name']} ({format_hz_to_khz(old_device['defaultSampleRate'])} kHz, {old_device[channels_key]} ch) ➔ "
+                   f"{old_device['name']} ({format_hz_to_khz(old_device['defaultSampleRate'])} kHz, {old_device[channels_key]} ch) → "
                    f"{new_device['name']} ({format_hz_to_khz(new_device['defaultSampleRate'])} kHz, {new_device[channels_key]} ch)")
 
     current_output_device, current_input_device = None, None
