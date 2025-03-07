@@ -211,16 +211,27 @@ class SoundBridgeServer:
 
 def device_monitor(signal: Event):
     """The check must be performed in another process, as PyAudio must be terminated to detect device changes."""
+
+    def print_change(icon, old_device, new_device, channels_key):
+        if old_device is not None:
+            print_(f"{icon} "
+                   f"{old_device['name']} ({old_device['defaultSampleRate']:.0f} Hz, {old_device[channels_key]} ch) ➔ "
+                   f"{new_device['name']} ({new_device['defaultSampleRate']:.0f} Hz, {new_device[channels_key]} ch)")
+
     current_output_device, current_input_device = None, None
 
     while time.sleep(1.) or True:
         audio_interface = pyaudio.PyAudio()
-        output_device = audio_interface.get_default_output_device_info()['index']
-        input_device = audio_interface.get_default_input_device_info()['index']
+        output_device = audio_interface.get_default_output_device_info()
+        input_device = audio_interface.get_default_input_device_info()
 
         if output_device != current_output_device or input_device != current_input_device:
-            current_output_device = output_device
-            current_input_device = input_device
+            if output_device != current_output_device:
+                print_change('🔊', current_output_device, output_device, 'maxOutputChannels')
+            if input_device != current_input_device:
+                print_change('🎤', current_input_device, input_device, 'maxInputChannels')
+
+            current_output_device, current_input_device = output_device, input_device
             signal.set()
 
         audio_interface.terminate()
