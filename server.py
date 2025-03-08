@@ -121,14 +121,14 @@ class Microphone(Thread):
 
 
 class SoundBridgeServer:
-    def __init__(self, server_port: int, control_port: int, server_host: str = ''):
+    def __init__(self, server_port: int, control_port: int, server_host: str = "0.0.0.0"):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
         self.server_socket.settimeout(UDP_TIMEOUT)
         print_(f"UDP listener started on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
-        self.client_address = "192.168.0.1", server_port
+        self.client_address = '', 0
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -165,9 +165,12 @@ class SoundBridgeServer:
         self.audio_interface.terminate()
         self.server_socket.close()
 
-    def send_data(self, data: bytes):
+    def send_data(self, data: bytes) -> int:
         """Sends data to the client."""
-        return self.server_socket.sendto(data, self.client_address)
+        try:
+            return self.server_socket.sendto(data, self.client_address)
+        except OSError:
+            return -1
 
     def receive_data(self, max_bytes: int) -> bytes:
         """Receives data from the client and updates the client address."""

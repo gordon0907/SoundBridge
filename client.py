@@ -155,7 +155,7 @@ class SoundBridgeClient:
         self.audio_interface.terminate()
         self.client_socket.close()
 
-    def send_data(self, data: bytes):
+    def send_data(self, data: bytes) -> int:
         """Sends data to the server."""
         return self.client_socket.sendto(data, self.server_address)
 

@@ -9,7 +9,7 @@ TCP_READ_SIZE: int = 1024
 
 
 class ControlChannelServer:
-    def __init__(self, app_server, control_port: int, server_host: str = ''):
+    def __init__(self, app_server, control_port: int, server_host: str = "0.0.0.0"):
         self.app_server = app_server
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
         self.server_socket.bind((server_host, control_port))
