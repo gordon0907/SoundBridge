@@ -13,7 +13,6 @@ from miscellaneous import *
 
 SERVER_PORT: int = 2024
 CONTROL_PORT: int = 2025
-UDP_TIMEOUT: float = 1.  # in seconds
 FORMAT: int = pyaudio.paInt16  # 16-bit format
 NUM_FRAMES: int = 32  # Number of frames per buffer
 
@@ -55,9 +54,10 @@ class Speaker(Thread):
         while self.run_flag:
             try:
                 audio_data: bytes = self.app.receive_data(self.config.packet_size)
-            except TimeoutError:
-                continue
-            stream.write(audio_data, exception_on_underflow=False)
+                stream.write(audio_data, exception_on_underflow=False)
+            except BlockingIOError:
+                # Allow time for the socket buffer to fill
+                time.sleep(BUFFER_TIME / 2)
 
         # Clean up
         stream.stop_stream()
@@ -124,7 +124,7 @@ class SoundBridgeServer:
     def __init__(self, server_port: int, control_port: int, server_host: str = "0.0.0.0"):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
-        self.server_socket.settimeout(UDP_TIMEOUT)
+        self.server_socket.setblocking(False)
         print_(f"UDP listener started on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
