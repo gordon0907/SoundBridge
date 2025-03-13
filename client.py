@@ -17,7 +17,7 @@ UDP_TIMEOUT: float = 1.  # in seconds
 
 
 class Speaker(Thread):
-    """Continuously captures system audio and sends it to the server."""
+    """Continuously capture system audio and send it to the server."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
@@ -72,7 +72,7 @@ class Speaker(Thread):
 
 
 class Microphone(Thread):
-    """Continuously receives audio from the server and plays it through the virtual cable."""
+    """Continuously receive audio from the server and play it through the virtual cable."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
         super().__init__()
@@ -156,11 +156,11 @@ class SoundBridgeClient:
         self.client_socket.close()
 
     def send_data(self, data: bytes) -> int:
-        """Sends data to the server."""
+        """Send data to the server."""
         return self.client_socket.sendto(data, self.server_address)
 
     def receive_data(self, max_bytes: int) -> bytes:
-        """Receives data from the server."""
+        """Receive data from the server."""
         data, _ = self.client_socket.recvfrom(max_bytes)
         return data
 

@@ -19,7 +19,7 @@ NUM_FRAMES: int = 32  # Number of frames per buffer
 
 
 class Speaker(Thread):
-    """Continuously receives audio data from the client and plays it on the system's default output device."""
+    """Continuously receive audio data from the client and play it on the system's default output device."""
 
     def __init__(self, app: SoundBridgeServer):
         super().__init__()
@@ -73,7 +73,7 @@ class Speaker(Thread):
 
 
 class Microphone(Thread):
-    """Continuously captures audio from the system's input device and sends it to the client."""
+    """Continuously capture audio from the system's input device and send it to the client."""
 
     def __init__(self, app: SoundBridgeServer):
         super().__init__()
@@ -166,14 +166,14 @@ class SoundBridgeServer:
         self.server_socket.close()
 
     def send_data(self, data: bytes) -> int:
-        """Sends data to the client."""
+        """Send data to the client."""
         try:
             return self.server_socket.sendto(data, self.client_address)
         except OSError:
             return -1
 
     def receive_data(self, max_bytes: int) -> bytes:
-        """Receives data from the client and updates the client address."""
+        """Receive data from the client and update the client address."""
         data, self.client_address = self.server_socket.recvfrom(max_bytes)
         return data
 

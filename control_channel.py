@@ -122,7 +122,7 @@ class ControlChannelClient:
         print_(f"{Color.CYAN}Sent TOGGLE_MICROPHONE to server{Color.RESET}")
 
     def wait_for_message(self, message: bytes):
-        """Blocks until the specified message is received from server."""
+        """Block until the specified message is received from server."""
         message_str = message.decode()
         while True:
             if self.receive_data() == message:
