@@ -1,129 +1,66 @@
 from __future__ import annotations
 
 import socket
-from functools import cache
-from threading import Thread
-from typing import override
 
 import pyaudiowpatch as pyaudio
 
+from audio_handlers import *
 from control_channel import ControlChannelClient
-from miscellaneous import *
 
 SERVER_HOST: str = "192.168.0.120"
 SERVER_PORT: int = 2024
 CONTROL_PORT: int = 2025
-UDP_TIMEOUT: float = 1.  # in seconds
 
 
-class Speaker(Thread):
+class Speaker(Sender):
     """Continuously capture system audio and send it to the server."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
-        super().__init__()
-        self.app: SoundBridgeClient = app
-        self.config = config
-
         # Get default loopback device info
-        self.device_info = self.app.audio_interface.get_default_wasapi_loopback()
-        self.run_flag: bool = True
+        device_info = app.audio_interface.get_default_wasapi_loopback()
 
-    @override
-    def run(self):
-        # Helper stream to keep the loopback stream non-blocking
-        output_stream = self.app.audio_interface.open(
+        super().__init__(app, config, device_info)
+
+        # Helper to keep the loopback stream read always available
+        self.helper_thread = Thread(target=self.helper)
+
+    def helper(self):
+        """Continuously write empty audio to the default output device to prevent loopback read blocking."""
+        stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
             format=self.config.audio_format,
             output=True,
         )
-        # Dummy num_frames may need to be increased if capturing NUM_FRAMES > 32
-        dummy_audio_data = self.app.generate_dummy_audio(1, self.config.channels, self.config.audio_format)
-
-        # Create audio stream instance
-        stream = self.app.audio_interface.open(
-            rate=self.config.sample_rate,
-            channels=self.config.channels,
-            format=self.config.audio_format,
-            input=True,
-            input_device_index=self.device_info['index'],
-            frames_per_buffer=self.config.num_frames,
-        )
-        print_(f"{Color.GREEN}Speaker started{Color.RESET}")
-        self.app.print_device_info(self)
+        dummy_audio_data = bytes(self.config.packet_size)
 
         while self.run_flag:
-            output_stream.write(dummy_audio_data, exception_on_underflow=False)
-            audio_data: bytes = stream.read(self.config.num_frames, exception_on_overflow=False)
-            self.app.send_data(audio_data)
+            stream.write(dummy_audio_data, exception_on_underflow=False)
 
         # Clean up
-        output_stream.stop_stream()
-        output_stream.close()
         stream.stop_stream()
         stream.close()
-        print_(f"{Color.RED}Speaker stopped{Color.RESET}")
 
-    def stop(self):
-        """Stop the thread and ensure it can be started again."""
-        if self.is_alive():
-            self.run_flag = False
-            self.join()
+    @override
+    def run(self):
+        self.helper_thread.start()
+        super().run()
+        self.helper_thread.join()
 
 
-class Microphone(Thread):
+class Microphone(Receiver):
     """Continuously receive audio from the server and play it through the virtual cable."""
 
     def __init__(self, app: SoundBridgeClient, config: AudioConfig):
-        super().__init__()
-        self.app: SoundBridgeClient = app
-        self.config = config
-
         # Find Virtual Audio Cable (CABLE Input) and get its device info
-        for i in range(self.app.audio_interface.get_device_count()):
-            device_info = self.app.audio_interface.get_device_info_by_index(i)
+        for i in range(app.audio_interface.get_device_count()):
+            device_info = app.audio_interface.get_device_info_by_index(i)
             if "CABLE Input" in device_info['name'] and device_info['hostApi'] == 0:  # MME
-                self.device_info = device_info
                 break
         else:
             raise RuntimeError("No CABLE Input device found")
 
-        self.run_flag: bool = True
-
-    @override
-    def run(self):
-        # Create audio stream instance
-        stream = self.app.audio_interface.open(
-            rate=self.config.sample_rate,
-            channels=self.config.channels,
-            format=self.config.audio_format,
-            output=True,
-            output_device_index=self.device_info['index'],
-            frames_per_buffer=self.config.num_frames,
-        )
-        print_(f"{Color.GREEN}Microphone started{Color.RESET}")
-        self.app.print_device_info(self)
-
-        # Reduce socket internal buffer size to decrease audio delay
-        self.app.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.config.udp_buffer_size)
-
-        while self.run_flag:
-            try:
-                audio_data: bytes = self.app.receive_data(self.config.packet_size)
-            except TimeoutError:
-                continue
-            stream.write(audio_data, exception_on_underflow=False)
-
-        # Clean up
-        stream.stop_stream()
-        stream.close()
-        print_(f"{Color.RED}Microphone stopped{Color.RESET}")
-
-    def stop(self):
-        """Stop the thread and ensure it can be started again."""
-        if self.is_alive():
-            self.run_flag = False
-            self.join()
+        super().__init__(app, config, device_info)
 
 
 class SoundBridgeClient:
@@ -131,7 +68,10 @@ class SoundBridgeClient:
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.client_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
-        self.client_socket.settimeout(UDP_TIMEOUT)
+        self.client_socket.setblocking(False)
+
+        # Initialize socket with an empty packet
+        self.send_data(b'')
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -156,6 +96,10 @@ class SoundBridgeClient:
         self.audio_interface.terminate()
         self.client_socket.close()
 
+    def set_receive_buffer_size(self, size: int):
+        """Set socket receive buffer size in bytes."""
+        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, size)
+
     def send_data(self, data: bytes) -> int:
         """Send data to the server."""
         return self.client_socket.sendto(data, self.server_address)
@@ -164,17 +108,6 @@ class SoundBridgeClient:
         """Receive data from the server."""
         data, _ = self.client_socket.recvfrom(max_bytes)
         return data
-
-    @staticmethod
-    def print_device_info(device: Speaker | Microphone):
-        class_name = device.__class__.__name__
-        print_(f"<{class_name}> {device.device_info['name']} | "
-               f"{format_hz_to_khz(device.config.sample_rate)} kHz, {device.config.channels} ch")
-
-    @staticmethod
-    @cache
-    def generate_dummy_audio(num_frames: int, channels: int, audio_format: int) -> bytes:
-        return b'\x00' * num_frames * channels * pyaudio.get_sample_size(audio_format)
 
 
 def main():
