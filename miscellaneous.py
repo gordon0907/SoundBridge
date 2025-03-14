@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import cached_property
 
+import psutil
 from pyaudio import get_sample_size
 
 BUFFER_TIME: float = 0.2  # in seconds
@@ -69,3 +70,17 @@ def format_hz_to_khz(hz: int | float) -> str:
 
 def print_(*args, **kwargs):
     return print(f"[{datetime.now().isoformat()}]", *args, **kwargs)
+
+
+def raise_process_priority():
+    process = psutil.Process()
+
+    if psutil.WINDOWS:
+        process.nice(psutil.HIGH_PRIORITY_CLASS)
+        print_("Set process priority to HIGH_PRIORITY_CLASS")
+    elif psutil.MACOS:
+        try:
+            process.nice(-10)
+            print_("Set process priority to nice -10")
+        except psutil.AccessDenied:
+            print_("Permission denied: Run with sudo for nice -10 process priority")

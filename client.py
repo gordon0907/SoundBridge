@@ -130,6 +130,7 @@ class SoundBridgeClient:
     def __init__(self, server_host: str, server_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.client_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
         self.client_socket.settimeout(UDP_TIMEOUT)
 
         # Initialize audio interface
@@ -195,4 +196,5 @@ def main():
 
 
 if __name__ == '__main__':
+    raise_process_priority()
     main()

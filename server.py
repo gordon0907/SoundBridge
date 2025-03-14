@@ -123,6 +123,7 @@ class Microphone(Thread):
 class SoundBridgeServer:
     def __init__(self, server_port: int, control_port: int, server_host: str = "0.0.0.0"):
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.server_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
         self.server_socket.bind((server_host, server_port))
         self.server_socket.setblocking(False)
         print_(f"UDP listener started on port {server_port}")
@@ -225,8 +226,12 @@ def device_monitor(signal: Event):
 
     while time.sleep(1.) or True:
         audio_interface = pyaudio.PyAudio()
-        output_device = audio_interface.get_default_output_device_info()
-        input_device = audio_interface.get_default_input_device_info()
+
+        try:
+            output_device = audio_interface.get_default_output_device_info()
+            input_device = audio_interface.get_default_input_device_info()
+        except OSError:
+            continue
 
         if output_device != current_output_device or input_device != current_input_device:
             if output_device != current_output_device:
@@ -248,4 +253,5 @@ def main():
 
 
 if __name__ == '__main__':
+    raise_process_priority()
     main()
