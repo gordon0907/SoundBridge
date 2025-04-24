@@ -5,11 +5,8 @@ import socket
 import pyaudiowpatch as pyaudio
 
 from audio_handlers import *
+from config import *
 from control_channel import ControlChannelClient
-
-SERVER_HOST: str = "192.168.0.120"
-SERVER_PORT: int = 2024
-CONTROL_PORT: int = 2025
 
 
 class Speaker(Sender):

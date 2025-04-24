@@ -3,15 +3,9 @@ from __future__ import annotations
 import socket
 from multiprocessing import Event, Process
 
-import pyaudio
-
 from audio_handlers import *
+from config import *
 from control_channel import ControlChannelServer
-
-SERVER_PORT: int = 2024
-CONTROL_PORT: int = 2025
-FORMAT: int = pyaudio.paInt16  # 16-bit format
-NUM_FRAMES: int = 32  # Number of frames per buffer
 
 
 class Speaker(Receiver):
