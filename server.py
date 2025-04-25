@@ -169,6 +169,7 @@ def device_monitor(signal: Event):
             output_device = audio_interface.get_default_output_device_info()
             input_device = audio_interface.get_default_input_device_info()
         except OSError:
+            audio_interface.terminate()
             continue
 
         if output_device != current_output_device or input_device != current_input_device:
