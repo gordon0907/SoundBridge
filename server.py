@@ -3,6 +3,8 @@ from __future__ import annotations
 import socket
 from multiprocessing import Event, Process
 
+import pyaudio
+
 from audio_handlers import *
 from config import *
 from control_channel import ControlChannelServer
