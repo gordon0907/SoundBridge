@@ -128,10 +128,18 @@ class SoundBridgeServer:
             self.microphone.stop()
             self.audio_interface.terminate()
 
-            # Reinitialize audio interface and device instances
-            self.audio_interface = pyaudio.PyAudio()
-            self.speaker = Speaker(self)
-            self.microphone = Microphone(self)
+            # Reinitialize audio interface and device instances until successful
+            while True:
+                self.audio_interface = pyaudio.PyAudio()
+
+                # Handle OSError raised by get_default_XXX_device_info()
+                try:
+                    self.speaker = Speaker(self)
+                    self.microphone = Microphone(self)
+                    break
+                except OSError:
+                    self.audio_interface.terminate()
+                    continue
 
             # Restart devices if they were previously running
             is_speaker_on and self.speaker.start()
