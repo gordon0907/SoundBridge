@@ -60,7 +60,7 @@ class SoundBridgeServer:
         self.server_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
         self.server_socket.bind((server_host, server_port))
         self.server_socket.setblocking(False)
-        print_(f"UDP listener started on port {server_port}")
+        print_(f"UDP data channel listening on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
         self.client_address = '', 0
@@ -85,7 +85,7 @@ class SoundBridgeServer:
         self.speaker: Speaker = Speaker(self)
         self.microphone: Microphone = Microphone(self)
 
-        # Initialize TCP control channel server
+        # Initialize the control channel server
         self.control = ControlChannelServer(self, control_port, server_host)
 
     def __enter__(self):

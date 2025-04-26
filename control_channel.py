@@ -1,136 +1,109 @@
 import socket
+import time
 from contextlib import suppress
 from threading import Thread
 
 from miscellaneous import *
 
-TCP_TIMEOUT: float = 1.
-TCP_READ_SIZE: int = 1024
+MAX_MSG_LEN: int = 1024
+CLIENT_TIMEOUT: float = 1.
 
 
 class ControlChannelServer:
     def __init__(self, app_server, control_port: int, server_host: str = "0.0.0.0"):
         self.app_server = app_server
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, control_port))
-        self.server_socket.listen()  # No pending client queue
-        print_(f"TCP listener started on port {control_port}")
+        print_(f"UDP control channel listening on port {control_port}")
 
-        self.conn, self.addr = None, None
-        Thread(target=self.connection_handler, daemon=True).start()
+        # Set to an invalid placeholder; will be updated with a valid address upon receiving data
+        self.client_address = '', 0
 
-        # Instantiate `request_handler` thread
-        self.request_handler_thread = Thread(target=self.request_handler, daemon=True)
-
-    def connection_handler(self):
-        while True:
-            conn, addr = self.server_socket.accept()
-
-            # Maintain only one connection at a time
-            if self.conn is not None:
-                self.conn.close()
-                print_(f"Closed TCP connection with {self.addr[0]}:{self.addr[1]}")
-            self.conn, self.addr = conn, addr
-            print_(f"TCP Connected with {self.addr[0]}:{self.addr[1]}")
-
-            if not self.request_handler_thread.is_alive():
-                self.request_handler_thread.start()
+        Thread(target=self.request_handler, daemon=True).start()
 
     def request_handler(self):
         while True:
-            try:
-                data: bytes = self.conn.recv(TCP_READ_SIZE)
-            except OSError:  # Exception on connection change
-                continue
+            command, self.client_address = self.server_socket.recvfrom(MAX_MSG_LEN)
 
-            match data:
+            match command:
                 case b'SPEAKER_CONFIG':
                     config = self.app_server.speaker.config
-                    self.conn.sendall(config.to_bytes())
+                    self.server_socket.sendto(config.to_bytes(), self.client_address)
                     print_(f"{Color.CYAN}Sent SPEAKER_CONFIG to client{Color.RESET}")
                 case b'MICROPHONE_CONFIG':
                     config = self.app_server.microphone.config
-                    self.conn.sendall(config.to_bytes())
+                    self.server_socket.sendto(config.to_bytes(), self.client_address)
                     print_(f"{Color.CYAN}Sent MICROPHONE_CONFIG to client{Color.RESET}")
                 case b'TOGGLE_MICROPHONE':
                     if self.app_server.microphone.is_alive():
                         self.app_server.microphone.stop()
                     else:
                         self.app_server.microphone.start()
-                    self.conn.sendall(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF')
+                    self.server_socket.sendto(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF',
+                                              self.client_address)
 
-    def send_client(self, message: bytes):
-        def thread():
-            # Best effort, regardless of failure
-            with suppress(Exception):
-                self.conn.sendall(message)
-                print_(f"{Color.CYAN}Sent {message_str} to client{Color.RESET}")
-
-        message_str = message.decode()
-        Thread(target=thread, daemon=True).start()
+    def _send_client_with_retries(self, data: bytes, interval: float = 0.1, attempts: int = 3):
+        """Send data to client with multiple best-effort attempts."""
+        with suppress(OSError):
+            for i in reversed(range(attempts)):
+                self.server_socket.sendto(data, self.client_address)
+                if i > 0:
+                    time.sleep(interval)
+            print_(f"{Color.CYAN}Sent {data.decode()} to client{Color.RESET}")
 
     def stop_client(self):
-        self.send_client(b'STOP')
+        self._send_client_with_retries(b'STOP')
 
     def start_client(self):
-        self.send_client(b'START')
+        self._send_client_with_retries(b'START')
 
 
 class ControlChannelClient:
     def __init__(self, server_host: str, control_port: int):
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP
-        while True:
-            print_(f"Attempting TCP connection to {server_host}:{control_port}")
-            with suppress(ConnectionRefusedError):
-                self.client_socket.connect((server_host, control_port))
-                break
-        print_(f"TCP connection successful")
-        self.client_socket.settimeout(TCP_TIMEOUT)  # Avoid blocking if expected data is not received
+        self.server_address = server_host, control_port
+        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.client_socket.settimeout(CLIENT_TIMEOUT)
 
     def receive_data(self) -> bytes:
         """Return received data or empty bytes if a timeout occurs."""
         try:
-            data = self.client_socket.recv(TCP_READ_SIZE)
+            data, _ = self.client_socket.recvfrom(MAX_MSG_LEN)
         except TimeoutError:
             return b''
 
-        # Print message if it is not a command
-        if b' ' in data:
-            with suppress(UnicodeDecodeError):
-                print_(f"{Color.MAGENTA}{data.decode()}{Color.RESET}")
+        # Handle specific notification messages
+        if data in (b'MIC ON', b'MIC OFF'):
+            print_(f"{Color.MAGENTA}{data.decode()}{Color.RESET}")
 
         return data
 
-    def get_speaker_config(self) -> AudioConfig:
+    def _get_audio_config(self, device: bytes) -> AudioConfig:
         while True:
-            self.client_socket.sendall(b'SPEAKER_CONFIG')
+            self.client_socket.sendto(device, self.server_address)
             data = self.receive_data()
             if (config := AudioConfig.from_bytes(data)) is not None:
-                print_(f"{Color.YELLOW}Received SPEAKER_CONFIG from server{Color.RESET}")
+                print_(f"{Color.YELLOW}Received {device.decode()} from server{Color.RESET}")
                 return config
+
+    def get_speaker_config(self) -> AudioConfig:
+        return self._get_audio_config(b'SPEAKER_CONFIG')
 
     def get_microphone_config(self) -> AudioConfig:
-        while True:
-            self.client_socket.sendall(b'MICROPHONE_CONFIG')
-            data = self.receive_data()
-            if (config := AudioConfig.from_bytes(data)) is not None:
-                print_(f"{Color.YELLOW}Received MICROPHONE_CONFIG from server{Color.RESET}")
-                return config
+        return self._get_audio_config(b'MICROPHONE_CONFIG')
 
     def toggle_microphone(self):
-        self.client_socket.sendall(b'TOGGLE_MICROPHONE')
+        self.client_socket.sendto(b'TOGGLE_MICROPHONE', self.server_address)
         print_(f"{Color.CYAN}Sent TOGGLE_MICROPHONE to server{Color.RESET}")
 
-    def wait_for_message(self, message: bytes):
-        """Block until the specified message is received from server."""
-        message_str = message.decode()
+    def _wait_for_command(self, expected_command: bytes):
+        """Block until the expected command is received from server."""
         while True:
-            if self.receive_data() == message:
-                print_(f"{Color.YELLOW}Received {message_str} from server{Color.RESET}")
+            if self.receive_data() == expected_command:
+                print_(f"{Color.YELLOW}Received {expected_command.decode()} from server{Color.RESET}")
                 return
 
     def wait_for_stop(self):
-        self.wait_for_message(b'STOP')
+        self._wait_for_command(b'STOP')
 
     def wait_for_start(self):
-        self.wait_for_message(b'START')
+        self._wait_for_command(b'START')
