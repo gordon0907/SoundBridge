@@ -1,7 +1,7 @@
 from pyaudio import paInt16
 
 # Global config
-SERVER_PORT: int = 2025
+DATA_PORT: int = 2025
 CONTROL_PORT: int = 2026
 
 # Server config

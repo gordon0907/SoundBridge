@@ -113,7 +113,7 @@ def main():
             speaker_config = control_client.get_speaker_config()
             microphone_config = control_client.get_microphone_config()
 
-            with SoundBridgeClient(SERVER_HOST, SERVER_PORT, speaker_config, microphone_config):
+            with SoundBridgeClient(SERVER_HOST, DATA_PORT, speaker_config, microphone_config):
                 control_client.wait_for_stop()
 
             control_client.wait_for_start()

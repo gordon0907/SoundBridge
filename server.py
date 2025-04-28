@@ -187,7 +187,7 @@ def device_monitor(signal: Event):
 
 
 def main():
-    with SoundBridgeServer(SERVER_PORT, CONTROL_PORT) as app:
+    with SoundBridgeServer(DATA_PORT, CONTROL_PORT) as app:
         app.speaker.start()
         app.microphone.start()
         input()

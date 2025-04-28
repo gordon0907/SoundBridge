@@ -10,11 +10,11 @@ CLIENT_TIMEOUT: float = 1.
 
 
 class ControlChannelServer:
-    def __init__(self, app_server, control_port: int, server_host: str = "0.0.0.0"):
+    def __init__(self, app_server, server_port: int, server_host: str = "0.0.0.0"):
         self.app_server = app_server
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.server_socket.bind((server_host, control_port))
-        print_(f"UDP control channel listening on port {control_port}")
+        self.server_socket.bind((server_host, server_port))
+        print_(f"UDP control channel listening on port {server_port}")
 
         # Set to an invalid placeholder; will be updated with a valid address upon receiving data
         self.client_address = '', 0
@@ -63,8 +63,8 @@ class ControlChannelServer:
 
 
 class ControlChannelClient:
-    def __init__(self, server_host: str, control_port: int):
-        self.server_address = server_host, control_port
+    def __init__(self, server_host: str, server_port: int):
+        self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.client_socket.settimeout(CLIENT_TIMEOUT)
 
