@@ -3,10 +3,8 @@ import time
 from contextlib import suppress
 from threading import Thread
 
+from config import *
 from miscellaneous import *
-
-MAX_MSG_LEN: int = 1024
-CLIENT_TIMEOUT: float = 1.
 
 
 class ControlChannelServer:
@@ -24,7 +22,7 @@ class ControlChannelServer:
     def request_handler(self):
         while True:
             previous_client_address = self.client_address
-            command, self.client_address = self.server_socket.recvfrom(MAX_MSG_LEN)
+            command, self.client_address = self.server_socket.recvfrom(MAX_PACKET_SIZE)
 
             match command:
                 case b'SPEAKER_CONFIG':
@@ -66,12 +64,12 @@ class ControlChannelClient:
     def __init__(self, server_host: str, server_port: int):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.client_socket.settimeout(CLIENT_TIMEOUT)
+        self.client_socket.settimeout(SOCKET_TIMEOUT)
 
     def receive_data(self) -> bytes:
         """Return received data or empty bytes if a timeout occurs."""
         try:
-            data, _ = self.client_socket.recvfrom(MAX_MSG_LEN)
+            data, _ = self.client_socket.recvfrom(MAX_PACKET_SIZE)
         except TimeoutError:
             return b''
 

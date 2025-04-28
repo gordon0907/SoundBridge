@@ -19,8 +19,8 @@ class Speaker(Receiver):
         config = AudioConfig(
             sample_rate=max(int(device_info['defaultSampleRate']), 48000),  # At least 48 kHz for client's WASAPI
             channels=device_info['maxOutputChannels'],
-            audio_format=FORMAT,
-            num_frames=NUM_FRAMES,
+            audio_dtype=AUDIO_DTYPE,
+            frames_per_chunk=FRAMES_PER_CHUNK,
         )
 
         super().__init__(app, config, device_info)
@@ -41,8 +41,8 @@ class Microphone(Sender):
         config = AudioConfig(
             sample_rate=int(device_info['defaultSampleRate']),
             channels=device_info['maxInputChannels'],
-            audio_format=FORMAT,
-            num_frames=NUM_FRAMES,
+            audio_dtype=AUDIO_DTYPE,
+            frames_per_chunk=FRAMES_PER_CHUNK,
         )
 
         super().__init__(app, config, device_info)
