@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import socket
+import time
 from multiprocessing import Event, Process
+from threading import Thread
+from typing import override
 
 import pyaudio
 
-from audio_handlers import *
+from audio_handlers import Receiver, Sender
 from config import *
 from control_channel import ControlChannelServer
+from data_channel import DataChannel
+from miscellaneous import *
 
 
 class Speaker(Receiver):
@@ -55,16 +59,7 @@ class Microphone(Sender):
 
 
 class SoundBridgeServer:
-    def __init__(self, server_port: int, control_port: int, server_host: str = "0.0.0.0"):
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.server_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
-        self.server_socket.bind((server_host, server_port))
-        self.server_socket.setblocking(False)
-        print_(f"UDP data channel listening on port {server_port}")
-
-        # Set to an invalid placeholder; will be updated with a valid address upon receiving data
-        self.client_address = '', 0
-
+    def __init__(self, data_port: int, control_port: int, server_host: str = "0.0.0.0"):
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
 
@@ -85,8 +80,18 @@ class SoundBridgeServer:
         self.speaker: Speaker = Speaker(self)
         self.microphone: Microphone = Microphone(self)
 
-        # Initialize the control channel server
-        self.control = ControlChannelServer(self, control_port, server_host)
+        # Start data channel
+        self.data_channel = DataChannel(
+            is_server=True,
+            server_host=server_host,
+            server_port=data_port,
+            sender_config=self.microphone.config,
+            receiver_config=self.speaker.config,
+        )
+        self.data_channel.start()
+
+        # Start control channel
+        self.control_channel = ControlChannelServer(self, control_port, server_host)
 
     def __enter__(self):
         return self
@@ -98,28 +103,12 @@ class SoundBridgeServer:
         self.speaker.stop()
         self.microphone.stop()
         self.audio_interface.terminate()
-        self.server_socket.close()
-
-    def set_receive_buffer_size(self, size: int):
-        """Set socket receive buffer size in bytes."""
-        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, size)
-
-    def send_data(self, data: bytes) -> int:
-        """Send data to the client."""
-        try:
-            return self.server_socket.sendto(data, self.client_address)
-        except OSError:
-            return -1
-
-    def receive_data(self, max_bytes: int) -> bytes:
-        """Receive data from the client and update the client address."""
-        data, self.client_address = self.server_socket.recvfrom(max_bytes)
-        return data
+        self.data_channel.stop()
 
     def reload_pyaudio(self):
         while self.need_reload.wait():
             # Stop the client before reloading
-            self.control.stop_client()
+            self.control_channel.stop_client()
 
             # Store device statuses
             is_speaker_on = self.speaker.is_alive()
@@ -143,12 +132,17 @@ class SoundBridgeServer:
                     self.audio_interface.terminate()
                     continue
 
+            # Apply updated configs to the data channel
+            self.data_channel.stop()
+            self.data_channel.setup(self.microphone.config, self.speaker.config)
+            self.data_channel.start()
+
             # Restart devices if they were previously running
             is_speaker_on and self.speaker.start()
             is_microphone_on and self.microphone.start()
 
             # Restart the client
-            self.control.start_client()
+            self.control_channel.start_client()
 
             self.need_reload.clear()
 

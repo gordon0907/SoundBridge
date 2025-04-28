@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-import socket
+from threading import Thread
+from typing import override
 
 import pyaudiowpatch as pyaudio
 
-from audio_handlers import *
+from audio_handlers import Receiver, Sender
 from config import *
 from control_channel import ControlChannelClient
+from data_channel import DataChannel
+from miscellaneous import *
 
 
 class Speaker(Sender):
@@ -26,10 +29,10 @@ class Speaker(Sender):
         stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
-            format=self.config.audio_format,
+            format=self.config.audio_dtype,
             output=True,
         )
-        dummy_audio_data = bytes(self.config.packet_size)
+        dummy_audio_data = bytes(self.config.chunk_size)
 
         while self.run_flag:
             stream.write(dummy_audio_data, exception_on_underflow=False)
@@ -61,14 +64,16 @@ class Microphone(Receiver):
 
 
 class SoundBridgeClient:
-    def __init__(self, server_host: str, server_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
-        self.server_address = server_host, server_port
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.client_socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
-        self.client_socket.setblocking(False)
-
-        # Initialize socket with an empty packet
-        self.send_data(b'')
+    def __init__(self, server_host: str, data_port: int, speaker_config: AudioConfig, microphone_config: AudioConfig):
+        # Start data channel
+        self.data_channel = DataChannel(
+            is_server=False,
+            server_host=server_host,
+            server_port=data_port,
+            sender_config=speaker_config,
+            receiver_config=microphone_config,
+        )
+        self.data_channel.start()
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()
@@ -91,20 +96,7 @@ class SoundBridgeClient:
         self.speaker.stop()
         self.microphone.stop()
         self.audio_interface.terminate()
-        self.client_socket.close()
-
-    def set_receive_buffer_size(self, size: int):
-        """Set socket receive buffer size in bytes."""
-        self.client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, size)
-
-    def send_data(self, data: bytes) -> int:
-        """Send data to the server."""
-        return self.client_socket.sendto(data, self.server_address)
-
-    def receive_data(self, max_bytes: int) -> bytes:
-        """Receive data from the server."""
-        data, _ = self.client_socket.recvfrom(max_bytes)
-        return data
+        self.data_channel.stop()
 
 
 def main():

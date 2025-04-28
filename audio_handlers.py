@@ -2,11 +2,17 @@ import time
 from threading import Thread
 from typing import TYPE_CHECKING, override
 
+from config import *
 from miscellaneous import *
 
 if TYPE_CHECKING:
     from client import SoundBridgeClient  # noqa
     from server import SoundBridgeServer  # noqa
+
+
+def print_device_info(streamer: 'Sender | Receiver'):
+    print_(f"<{streamer.class_name}> {streamer.device_info['name']} | "
+           f"{format_hz_to_khz(streamer.config.sample_rate)} kHz, {streamer.config.channels} ch")
 
 
 class Sender(Thread):
@@ -25,17 +31,17 @@ class Sender(Thread):
         stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
-            format=self.config.audio_format,
+            format=self.config.audio_dtype,
             input=True,
             input_device_index=self.device_info['index'],
-            frames_per_buffer=self.config.num_frames,
+            frames_per_buffer=self.config.frames_per_chunk,
         )
         print_(f"{Color.GREEN}{self.class_name} started{Color.RESET}")
-        self.print_device_info()
+        print_device_info(self)
 
         while self.run_flag:
-            audio_data: bytes = stream.read(self.config.num_frames, exception_on_overflow=False)
-            self.app.send_data(audio_data)
+            audio_chunk: bytes = stream.read(self.config.frames_per_chunk, exception_on_overflow=False)
+            self.app.data_channel.put_chunk(audio_chunk)
 
         # Clean up
         stream.stop_stream()
@@ -46,10 +52,6 @@ class Sender(Thread):
         if self.is_alive():
             self.run_flag = False
             self.join()
-
-    def print_device_info(self):
-        print_(f"<{self.class_name}> {self.device_info['name']} | "
-               f"{format_hz_to_khz(self.config.sample_rate)} kHz, {self.config.channels} ch")
 
 
 class Receiver(Thread):
@@ -68,23 +70,19 @@ class Receiver(Thread):
         stream = self.app.audio_interface.open(
             rate=self.config.sample_rate,
             channels=self.config.channels,
-            format=self.config.audio_format,
+            format=self.config.audio_dtype,
             output=True,
             output_device_index=self.device_info['index'],
-            frames_per_buffer=self.config.num_frames,
+            frames_per_buffer=self.config.frames_per_chunk,
         )
         print_(f"{Color.GREEN}{self.class_name} started{Color.RESET}")
-        self.print_device_info()
-
-        # Reduce socket internal buffer size to decrease audio delay
-        self.app.set_receive_buffer_size(self.config.udp_buffer_size)
+        print_device_info(self)
 
         while self.run_flag:
-            try:
-                audio_data: bytes = self.app.receive_data(self.config.packet_size)
-                stream.write(audio_data, exception_on_underflow=False)
-            except BlockingIOError:
-                # Allow time for the socket buffer to fill
+            if (audio_chunk := self.app.data_channel.get_chunk()) is not None:
+                stream.write(audio_chunk, exception_on_underflow=False)
+            else:
+                # Allow time for the buffer to fill
                 time.sleep(BUFFER_TIME / 2)
 
         # Clean up
@@ -96,7 +94,3 @@ class Receiver(Thread):
         if self.is_alive():
             self.run_flag = False
             self.join()
-
-    def print_device_info(self):
-        print_(f"<{self.class_name}> {self.device_info['name']} | "
-               f"{format_hz_to_khz(self.config.sample_rate)} kHz, {self.config.channels} ch")

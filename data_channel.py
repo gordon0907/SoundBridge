@@ -17,7 +17,7 @@ class DataChannel:
             sender_config: AudioConfig,
             receiver_config: AudioConfig,
     ):
-        # --- 1. Socket Setup ---
+        # --- 1. Set Up Socket ---
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.socket.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, 0x10)  # IPTOS_LOWDELAY
         self.socket.settimeout(SOCKET_TIMEOUT)
@@ -26,40 +26,56 @@ class DataChannel:
         if is_server:
             self.socket.bind((server_host, server_port))
             print_(f"UDP data channel listening on port {server_port}")
-
             self.dst_address = '', 0  # To be set on data receipt
         else:
+            self.socket.bind(("0.0.0.0", 0))  # Prevent OSError on recvfrom before sendto
             self.dst_address = server_host, server_port
 
-        # --- 2. Buffer and Config Setup ---
-        self.tx_buffer: deque[bytes] = deque(maxlen=int(BUFFER_TIME / sender_config.chunk_duration))
-        self.rx_buffer: deque[bytes] = deque(maxlen=int(BUFFER_TIME / receiver_config.chunk_duration))
+        # --- 2. Initialize and Set Up Buffer and Parameters ---
+        self.tx_buffer = self.rx_buffer = deque([b''])
+        self.tx_chunk_size = self.rx_chunk_size = 0
+        self.tx_chunks_per_pkt = self.rx_chunks_per_pkt = 0
+        self.tx_pkt_duration = self.rx_pkt_duration = 0.
 
-        self.tx_chunk_size: int = sender_config.chunk_size
-        self.rx_chunk_size: int = receiver_config.chunk_size
+        self.setup(sender_config, receiver_config)
 
-        self.tx_chunks_per_pkt: int = MAX_PACKET_SIZE // self.tx_chunk_size
-        self.rx_chunks_per_pkt: int = MAX_PACKET_SIZE // self.rx_chunk_size
+        # --- 3. Initialize and Start Thread ---
+        self.run_flag: bool = False
+        self.sender_thread = self.receiver_thread = Thread()
 
-        self.tx_pkt_duration: float = sender_config.chunk_duration * self.tx_chunks_per_pkt
-        self.rx_pkt_duration: float = receiver_config.chunk_duration * self.rx_chunks_per_pkt
+        self.start()
 
-        # --- 3. Thread Setup ---
-        self.run_flag: bool = True
+    def setup(self, sender_config: AudioConfig, receiver_config: AudioConfig):
+        """Set up buffers and parameters with the given configurations."""
+        self.tx_buffer = deque(maxlen=int(BUFFER_TIME / sender_config.chunk_duration))
+        self.rx_buffer = deque(maxlen=int(BUFFER_TIME / receiver_config.chunk_duration))
 
-        self.sender_thread = Thread(target=self.sender)
-        self.receiver_thread = Thread(target=self.receiver)
+        self.tx_chunk_size = sender_config.chunk_size
+        self.rx_chunk_size = receiver_config.chunk_size
+
+        self.tx_chunks_per_pkt = MAX_PACKET_SIZE // self.tx_chunk_size
+        self.rx_chunks_per_pkt = MAX_PACKET_SIZE // self.rx_chunk_size
+
+        self.tx_pkt_duration = sender_config.chunk_duration * self.tx_chunks_per_pkt
+        self.rx_pkt_duration = receiver_config.chunk_duration * self.rx_chunks_per_pkt
+
+    def start(self):
+        """Start the sender and receiver loop threads."""
+        self.run_flag = True
+
+        self.sender_thread = Thread(target=self.__sender)
+        self.receiver_thread = Thread(target=self.__receiver)
 
         self.sender_thread.start()
         self.receiver_thread.start()
 
-    def close(self):
+    def stop(self):
+        """Stop the sender and receiver loop threads."""
         self.run_flag = False
         self.sender_thread.join()
         self.receiver_thread.join()
-        self.socket.close()
 
-    def sender(self):
+    def __sender(self):
         while self.run_flag:
             # Wait for enough chunks
             if len(self.tx_buffer) < self.tx_chunks_per_pkt:
@@ -73,7 +89,7 @@ class DataChannel:
             except OSError:
                 pass
 
-    def receiver(self):
+    def __receiver(self):
         while self.run_flag:
             try:
                 payload, sender_address = self.socket.recvfrom(MAX_PACKET_SIZE)
