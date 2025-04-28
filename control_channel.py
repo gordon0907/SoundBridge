@@ -23,6 +23,7 @@ class ControlChannelServer:
 
     def request_handler(self):
         while True:
+            previous_client_address = self.client_address
             command, self.client_address = self.server_socket.recvfrom(MAX_MSG_LEN)
 
             match command:
@@ -41,6 +42,9 @@ class ControlChannelServer:
                         self.app_server.microphone.start()
                     self.server_socket.sendto(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF',
                                               self.client_address)
+                case _:
+                    # Revert client address on unknown command
+                    self.client_address = previous_client_address
 
     def _send_client_with_retries(self, data: bytes, interval: float = 0.1, attempts: int = 3):
         """Send data to client with multiple best-effort attempts."""
