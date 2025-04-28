@@ -85,7 +85,7 @@ class SoundBridgeClient:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type:
+        if exc_type is not None:
             traceback.print_exception(exc_type, exc_value, traceback)
 
         self.speaker.stop()
