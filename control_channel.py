@@ -64,6 +64,7 @@ class ControlChannelClient:
     def __init__(self, server_host: str, server_port: int):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
+        self.client_socket.bind(("0.0.0.0", 0))  # Bind to prevent firewall blocking after idle
         self.client_socket.settimeout(SOCKET_TIMEOUT)
 
     def receive_data(self) -> bytes:
