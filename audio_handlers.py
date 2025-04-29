@@ -10,11 +10,6 @@ if TYPE_CHECKING:
     from server import SoundBridgeServer  # noqa
 
 
-def print_device_info(streamer: 'Sender | Receiver'):
-    print_(f"<{streamer.class_name}> {streamer.device_info['name']} | "
-           f"{format_hz_to_khz(streamer.config.sample_rate)} kHz, {streamer.config.channels} ch")
-
-
 class Sender(Thread):
     def __init__(self, app: 'SoundBridgeServer | SoundBridgeClient', config: AudioConfig, device_info):
         super().__init__()
@@ -94,3 +89,8 @@ class Receiver(Thread):
         if self.is_alive():
             self.run_flag = False
             self.join()
+
+
+def print_device_info(streamer: Sender | Receiver):
+    print_(f"<{streamer.class_name}> {streamer.device_info['name']} | "
+           f"{format_hz_to_khz(streamer.config.sample_rate)} kHz, {streamer.config.channels} ch")
