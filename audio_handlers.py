@@ -3,7 +3,7 @@ from threading import Thread
 from typing import TYPE_CHECKING, override
 
 from config import *
-from miscellaneous import *
+from utils import *
 
 if TYPE_CHECKING:
     from client import SoundBridgeClient  # noqa

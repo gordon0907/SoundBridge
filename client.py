@@ -9,7 +9,7 @@ from audio_handlers import Receiver, Sender
 from config import *
 from control_channel import ControlChannelClient
 from data_channel import DataChannel
-from miscellaneous import *
+from utils import *
 
 
 class Speaker(Sender):
