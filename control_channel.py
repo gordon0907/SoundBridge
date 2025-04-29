@@ -64,8 +64,14 @@ class ControlChannelClient:
     def __init__(self, server_host: str, server_port: int):
         self.server_address = server_host, server_port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
-        self.client_socket.bind(("0.0.0.0", 0))  # Bind to prevent firewall blocking after idle
         self.client_socket.settimeout(SOCKET_TIMEOUT)
+
+        Thread(target=self.__heartbeat, daemon=True).start()
+
+    def __heartbeat(self, interval: float = 60.):
+        """Periodically send packets to prevent Windows Firewall timeouts that block traffic."""
+        while time.sleep(interval) or True:
+            self.client_socket.sendto(b'', self.server_address)
 
     def receive_data(self) -> bytes:
         """Return received data or empty bytes if a timeout occurs."""
