@@ -185,5 +185,4 @@ def main():
 
 
 if __name__ == '__main__':
-    raise_process_priority()
     main()
