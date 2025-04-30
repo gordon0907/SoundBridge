@@ -9,5 +9,5 @@ MAX_PACKET_SIZE: int = 1024  # bytes
 
 # Audio Configuration
 AUDIO_DTYPE: int = paInt16  # 16-bit format
-FRAMES_PER_CHUNK: int = 32
+FRAMES_PER_CHUNK: int = 128
 BUFFER_TIME: float = 0.2  # seconds
