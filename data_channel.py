@@ -37,15 +37,36 @@ class DataChannel:
         self.tx_chunks_per_pkt = self.rx_chunks_per_pkt = 0
         self.tx_pkt_duration = self.rx_pkt_duration = 0.
 
-        self.setup(sender_config, receiver_config)
+        self._setup(sender_config, receiver_config)
 
         # --- 3. Initialize and Start Thread ---
         self.run_flag: bool = False
         self.sender_thread = self.receiver_thread = Thread()
 
-        self.start()
+        self._start()
 
-    def setup(self, sender_config: AudioConfig, receiver_config: AudioConfig):
+    def restart(self, sender_config: AudioConfig, receiver_config: AudioConfig):
+        """Restart the data channel with new audio configurations."""
+        self.stop()
+        self._setup(sender_config, receiver_config)
+        self._start()
+
+    def stop(self):
+        """Stop the sender and receiver loop threads."""
+        self.run_flag = False
+        self.sender_thread.join()
+        self.receiver_thread.join()
+
+    def put_chunk(self, chunk: bytes) -> None:
+        self.tx_buffer.append(chunk)
+
+    def get_chunk(self) -> bytes | None:
+        try:
+            return self.rx_buffer.popleft()
+        except IndexError:
+            return None
+
+    def _setup(self, sender_config: AudioConfig, receiver_config: AudioConfig):
         """Set up buffers and parameters with the given configurations."""
         self.tx_buffer = deque(maxlen=int(BUFFER_TIME / sender_config.chunk_duration))
         self.rx_buffer = deque(maxlen=int(BUFFER_TIME / receiver_config.chunk_duration))
@@ -59,23 +80,17 @@ class DataChannel:
         self.tx_pkt_duration = sender_config.chunk_duration * self.tx_chunks_per_pkt
         self.rx_pkt_duration = receiver_config.chunk_duration * self.rx_chunks_per_pkt
 
-    def start(self):
+    def _start(self):
         """Start the sender and receiver loop threads."""
         self.run_flag = True
 
-        self.sender_thread = Thread(target=self.__sender)
-        self.receiver_thread = Thread(target=self.__receiver)
+        self.sender_thread = Thread(target=self._sender)
+        self.receiver_thread = Thread(target=self._receiver)
 
         self.sender_thread.start()
         self.receiver_thread.start()
 
-    def stop(self):
-        """Stop the sender and receiver loop threads."""
-        self.run_flag = False
-        self.sender_thread.join()
-        self.receiver_thread.join()
-
-    def __sender(self):
+    def _sender(self):
         while self.run_flag:
             # Wait for enough chunks
             if len(self.tx_buffer) < self.tx_chunks_per_pkt:
@@ -89,7 +104,7 @@ class DataChannel:
             except OSError:
                 pass
 
-    def __receiver(self):
+    def _receiver(self):
         while self.run_flag:
             try:
                 payload, sender_address = self.socket.recvfrom(MAX_PACKET_SIZE)
@@ -104,12 +119,3 @@ class DataChannel:
             payload_stream = BytesIO(payload)
             while chunk := payload_stream.read(self.rx_chunk_size):
                 self.rx_buffer.append(chunk)
-
-    def put_chunk(self, chunk: bytes) -> None:
-        self.tx_buffer.append(chunk)
-
-    def get_chunk(self) -> bytes | None:
-        try:
-            return self.rx_buffer.popleft()
-        except IndexError:
-            return None

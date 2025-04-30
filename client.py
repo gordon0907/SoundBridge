@@ -73,7 +73,6 @@ class SoundBridgeClient:
             sender_config=speaker_config,
             receiver_config=microphone_config,
         )
-        self.data_channel.start()
 
         # Initialize audio interface
         self.audio_interface = pyaudio.PyAudio()

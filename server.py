@@ -88,7 +88,6 @@ class SoundBridgeServer:
             sender_config=self.microphone.config,
             receiver_config=self.speaker.config,
         )
-        self.data_channel.start()
 
         # Start control channel
         self.control_channel = ControlChannelServer(self, control_port, server_host)
@@ -133,9 +132,7 @@ class SoundBridgeServer:
                     continue
 
             # Apply updated configs to the data channel
-            self.data_channel.stop()
-            self.data_channel.setup(self.microphone.config, self.speaker.config)
-            self.data_channel.start()
+            self.data_channel.restart(self.microphone.config, self.speaker.config)
 
             # Restart devices if they were previously running
             is_speaker_on and self.speaker.start()
