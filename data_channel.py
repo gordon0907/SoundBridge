@@ -97,7 +97,7 @@ class DataChannel:
                 time.sleep(self.tx_pkt_duration)
                 continue
 
-            # Send packet
+            # Send the packet
             payload = b''.join(self.tx_buffer.popleft() for _ in range(self.tx_chunks_per_pkt))
             try:
                 self.socket.sendto(payload, self.dst_address)
