@@ -77,8 +77,8 @@ class SoundBridgeServer:
         Thread(target=self.reload_pyaudio, daemon=True).start()
 
         # Instantiate speaker and microphone
-        self.speaker: Speaker = Speaker(self)
-        self.microphone: Microphone = Microphone(self)
+        self.speaker = Speaker(self)
+        self.microphone = Microphone(self)
 
         # Start data channel
         self.data_channel = DataChannel(

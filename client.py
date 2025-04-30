@@ -78,8 +78,8 @@ class SoundBridgeClient:
         self.audio_interface = pyaudio.PyAudio()
 
         # Instantiate speaker and microphone
-        self.speaker: Speaker = Speaker(self, speaker_config)
-        self.microphone: Microphone = Microphone(self, microphone_config)
+        self.speaker = Speaker(self, speaker_config)
+        self.microphone = Microphone(self, microphone_config)
 
         # Start speaker and microphone
         self.speaker.start()
