@@ -90,7 +90,7 @@ class SoundBridgeServer:
         )
 
         # Start control channel
-        self.control_channel = ControlChannelServer(self, control_port, server_host)
+        self.control_channel = ControlChannelServer(self, server_host, control_port)
 
     def __enter__(self):
         return self

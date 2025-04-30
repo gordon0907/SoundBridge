@@ -8,7 +8,7 @@ from utils import *
 
 
 class ControlChannelServer:
-    def __init__(self, app_server, server_port: int, server_host: str = "0.0.0.0"):
+    def __init__(self, app_server, server_host: str, server_port: int):
         self.app_server = app_server
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  # UDP
         self.server_socket.bind((server_host, server_port))
