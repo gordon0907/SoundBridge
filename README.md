@@ -50,11 +50,11 @@ it is!
    ```sh
    pip install pyaudiowpatch
    ```
-3. Run the client script:
+3. Configure server IP and port in `config.py` if necessary.
+4. Run the client script:
    ```sh
    python client.py
    ```
-4. Configure server IP and port in `config.py` if necessary.
 
 ## Controls
 
@@ -74,9 +74,7 @@ it is!
 
 ## Known Issues
 
-- **Audio Occasionally Laggy**: The audio may experience occasional choppiness for a few seconds. This is likely caused
-  by packet loss when the server side is connected via Wi-Fi. The solution being worked on is to reduce network traffic
-  by transmitting more frames in each UDP packet.
+- **N/A**: Currently no.
 
 ## TODO
 
