@@ -6,7 +6,7 @@ on Windows. It achieves low-latency UDP transmission using `pyaudio` and `VB-Aud
 ## Why SoundBridge?
 
 As an AirPods Pro enthusiast who frequently switches between macOS and Windows, I found that the Bluetooth experience on
-Windows is far from seamless. Since AirPods are optimized for Apple’s ecosystem, switching between devices is often
+Windows is far from seamless. Since AirPods are optimized for Apple's ecosystem, switching between devices is often
 frustrating. This led me to the idea of porting both input and output audio from Windows to macOS, effectively using the
 Mac as a speaker and microphone for the Windows machine.
 
@@ -54,7 +54,7 @@ it is!
    ```sh
    python client.py
    ```
-4. Configure server IP and port in `server.py` and `client.py` if necessary.
+4. Configure server IP and port in `config.py` if necessary.
 
 ## Controls
 
@@ -67,19 +67,20 @@ it is!
 
 - The application assumes that the client's input/output audio devices remain unchanged during streaming. If changed,
   restart the client.
-- The server’s default input/output devices can be changed at any time (e.g., putting on or removing AirPods).
-- If audio glitches occur, restart the client. If issues persist, restart the server as well.
+- The server's default input/output devices can be changed at any time (e.g., putting on or removing AirPods).
+- When AirPods disconnect from macOS (e.g., due to being too far away), the server may reload the devices even if the
+  default input/output devices remain unchanged. This is not a bug, but a result of internal changes in device indexing.
+- If the server is restarted, it is better to restart the client as well.
 
-## Known Issue
+## Known Issues
 
-- **Audio Delay After Toggling AirPods Microphone**: When using AirPods, toggling the microphone in the client may cause
-  a delay in the server's audio output. This issue likely occurs due to a shift in the AirPods' output sample rate when
-  the microphone is activated, dropping from 48 kHz to 24 kHz. The current workaround is to restart the client to reset
-  the audio stream delay.
+- **Audio Occasionally Laggy**: The audio may experience occasional choppiness for a few seconds. This is likely caused
+  by packet loss when the server side is connected via Wi-Fi. The solution being worked on is to reduce network traffic
+  by transmitting more frames in each UDP packet.
 
 ## TODO
 
-- Implement a GUI for the client.
+- Solve known issues.
 
 ---
 
