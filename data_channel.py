@@ -28,7 +28,7 @@ class DataChannel:
             print_(f"UDP data channel listening on port {server_port}")
             self.dst_address = '', 0  # To be set on data receipt
         else:
-            self.socket.bind(("0.0.0.0", 0))  # Prevent OSError on recvfrom before sendto
+            self.socket.bind(("0.0.0.0", 0))  # Bind to an ephemeral port to prevent OSError on recvfrom
             self.dst_address = server_host, server_port
 
         # --- 2. Initialize and Set Up Buffer and Parameters ---
