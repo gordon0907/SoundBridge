@@ -55,6 +55,8 @@ class ControlChannelServer:
                         self.app_server.microphone.start()
                     self.server_socket.sendto(b'MIC ON' if self.app_server.microphone.is_alive() else b'MIC OFF',
                                               self.client_address)
+                case b'HEARTBEAT':
+                    pass
                 case _:
                     # Revert client address on unknown command
                     self.client_address = previous_client_address
@@ -119,4 +121,4 @@ class ControlChannelClient:
     def _heartbeat(self, interval: float = 60.):
         """Periodically send packets to prevent Windows Firewall timeouts that block traffic."""
         while time.sleep(interval) or True:
-            self.client_socket.sendto(b'', self.server_address)
+            self.client_socket.sendto(b'HEARTBEAT', self.server_address)
