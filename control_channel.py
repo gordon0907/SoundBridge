@@ -40,14 +40,14 @@ class ControlChannelServer:
             command, self.client_address = self.server_socket.recvfrom(MAX_PACKET_SIZE)
 
             match command:
-                case b'SPEAKER_CONFIG':
-                    config = self.app_server.speaker.config
-                    self.server_socket.sendto(config.to_bytes(), self.client_address)
-                    print_(f"{Color.CYAN}Sent SPEAKER_CONFIG to client{Color.RESET}")
-                case b'MICROPHONE_CONFIG':
-                    config = self.app_server.microphone.config
-                    self.server_socket.sendto(config.to_bytes(), self.client_address)
-                    print_(f"{Color.CYAN}Sent MICROPHONE_CONFIG to client{Color.RESET}")
+                case b'SPEAKER_CONFIG' | b'MICROPHONE_CONFIG':
+                    config = (
+                        self.app_server.speaker.config
+                        if command == b'SPEAKER_CONFIG'
+                        else self.app_server.microphone.config
+                    )
+                    self.server_socket.sendto(command[:1] + config.to_bytes(), self.client_address)
+                    print_(f"{Color.CYAN}Sent {command.decode()} to client{Color.RESET}")
                 case b'TOGGLE_MICROPHONE':
                     if self.app_server.microphone.is_alive():
                         self.app_server.microphone.stop()
@@ -84,12 +84,16 @@ class ControlChannelClient:
     def wait_for_start(self):
         self._wait_for_command(b'START')
 
-    def _get_audio_config(self, device: bytes) -> AudioConfig:
+    def _get_audio_config(self, command: bytes) -> AudioConfig:
         while True:
-            self.client_socket.sendto(device, self.server_address)
+            self.client_socket.sendto(command, self.server_address)
             data = self._receive_data()
-            if (config := AudioConfig.from_bytes(data)) is not None:
-                print_(f"{Color.YELLOW}Received {device.decode()} from server{Color.RESET}")
+
+            prefix_byte, config_bytes = data[:1], data[1:]
+            config: AudioConfig | None = AudioConfig.from_bytes(config_bytes)
+
+            if prefix_byte == command[:1] and config is not None:
+                print_(f"{Color.YELLOW}Received {command.decode()} from server{Color.RESET}")
                 return config
 
     def _wait_for_command(self, expected_command: bytes):
