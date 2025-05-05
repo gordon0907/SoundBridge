@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import pickle
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from functools import cached_property
 
@@ -27,16 +27,36 @@ class AudioConfig:
         return self.frames_per_chunk / self.sample_rate
 
     def to_bytes(self) -> bytes:
-        """Serialize the object."""
-        return pickle.dumps(self)
+        """Serialize the instance to JSON bytes."""
+        return json.dumps(self._to_dict()).encode()
 
     @staticmethod
-    def from_bytes(bytes_) -> AudioConfig | None:
-        """Deserialize bytes into an AudioConfig, or return None on failure."""
+    def from_bytes(data: bytes) -> AudioConfig | None:
+        """Deserialize JSON bytes to AudioConfig, or None on failure."""
         try:
-            return pickle.loads(bytes_)
-        except (pickle.UnpicklingError, EOFError):
+            obj = json.loads(data)
+        except ValueError:
             return None
+
+        if not (
+                isinstance(obj, dict)
+                and all(isinstance(k, str) and isinstance(v, int) for k, v in obj.items())
+        ):
+            return None
+
+        try:
+            return AudioConfig._from_dict(obj)
+        except TypeError:
+            return None
+
+    def _to_dict(self) -> dict[str, int]:
+        """Convert the instance to a dict."""
+        return asdict(self)
+
+    @staticmethod
+    def _from_dict(data: dict[str, int]) -> AudioConfig:
+        """Create an AudioConfig from a dict."""
+        return AudioConfig(**data)
 
 
 class Color:
